@@ -107,7 +107,8 @@
     }
 
     // --- Featured tickers homepage ---
-    const featuredTickers = ['AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','SPY','QQQ'];
+    // Curated, less-mainstream ideas (rotatable)
+    const featuredTickers = ['CELH','ELF','IOT','DUOL','TOST','ACLS','INSP','GLBE','APP'];
     async function loadFeatured(){
       const grid = el('featuredGrid');
       grid.innerHTML = featuredTickers.map(sym=>
@@ -156,7 +157,24 @@
     }
 
     // Init homepage + suggestions
-    document.addEventListener('DOMContentLoaded', ()=>{ setupSuggestions(); loadFeatured(); });
+    document.addEventListener('DOMContentLoaded', ()=>{
+      setupSuggestions();
+      loadFeatured();
+      const params = new URLSearchParams(location.search);
+      const qTicker = params.get('ticker');
+      if(qTicker){
+        // Pre-fill and auto-run
+        el('ticker').value = qTicker;
+        const qRisk = params.get('risk');
+        const qMax = params.get('max_news');
+        if(qRisk){ el('risk').value = qRisk; }
+        if(qMax){ el('max_news').value = qMax; }
+        // Hide homepage when directly viewing a result
+        const feat = document.getElementById('featured');
+        if(feat) feat.classList.add('hidden');
+        run();
+      }
+    });
 
     async function run() {
       el('error').classList.add('hidden');
@@ -224,9 +242,20 @@
       }
     }
 
-    el('analyzeBtn').addEventListener('click', run);
-    // Default ticker
-    el('ticker').value = 'AAPL';
+    // Clicking Analyze opens a new tab with pre-filled params
+    el('analyzeBtn').addEventListener('click', (e)=>{
+      e.preventDefault();
+      const ticker = el('ticker').value.trim() || 'AAPL';
+      const risk = el('risk').value;
+      const max_news = Math.max(0, Math.min(25, parseInt(el('max_news').value || '8', 10)));
+      const url = `/?ticker=${encodeURIComponent(ticker)}&risk=${encodeURIComponent(risk)}&max_news=${max_news}`;
+      window.open(url, '_blank');
+    });
+
+    // Default ticker on initial load
+    if(!new URLSearchParams(location.search).get('ticker')){
+      el('ticker').value = 'AAPL';
+    }
   </script>
 </body>
 </html>
