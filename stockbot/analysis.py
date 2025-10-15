@@ -191,11 +191,42 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         if predicted is not None and predicted <= 0:
             predicted = None
 
-    # AI-style narrative focusing on causes (why up) and persistence (why continue)
+    # AI-style narrative: multi-source, nuanced, and explicit conditions
     t_qual = _qualitative_trend(trend)
     ed = getattr(price, "earnings_date", None)
-    reasons_moving = []
-    reasons_continue = []
+
+    # Collect sources and categorize stories
+    srcs = []
+    titles = []
+    for n in news or []:
+        s = (getattr(n, "source", None) or "").strip()
+        if s:
+            srcs.append(s)
+        t = (getattr(n, "title", "") or "").lower()
+        if t:
+            titles.append(t)
+
+    def _has_any(t: str, keys: list[str]) -> bool:
+        return any(k in t for k in keys)
+
+    earnings_keys_pos = ["beat", "beats", "raise", "raises", "record", "above", "strong"]
+    earnings_keys_neg = ["miss", "misses", "below", "cut", "cuts", "weak", "trim"]
+    product_keys = ["launch", "product", "platform", "integration", "contract", "partnership", "deal", "order"]
+    regulatory_keys = ["fda", "approval", "sec", "ftc", "lawsuit", "probe", "investigation", "fine"]
+    analyst_keys = ["upgrade", "downgrade", "initiates", "price target", "pt "]
+    ma_keys = ["acquisition", "merger", "buyout", "takeover"]
+    financing_keys = ["offering", "debt", "convertible", "raise", "funding"]
+
+    bull_stories = []
+    bear_stories = []
+    for t in titles[:12]:  # cap parsing
+        if _has_any(t, earnings_keys_pos) or _has_any(t, product_keys) or _has_any(t, ma_keys) or ("approval" in t):
+            bull_stories.append(t)
+        if _has_any(t, earnings_keys_neg) or _has_any(t, regulatory_keys) or _has_any(t, financing_keys):
+            bear_stories.append(t)
+
+    reasons_moving: list[str] = []
+    reasons_continue: list[str] = []
 
     # Why it's moving
     if hits:
@@ -234,14 +265,62 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     if t_qual in ("uptrend", "strong uptrend"):
         reasons_continue.append("constructive structure until it fails")
 
-    # Compose narrative
+    # Conditions for upside and invalidation
+    cond_up: list[str] = []
+    invalidation: list[str] = []
+    if price_now is not None:
+        pval = float(price_now)
+        if sma50 and pval < float(sma50):
+            cond_up.append("reclaim the 50-day moving average")
+        if sma200 and pval < float(sma200):
+            cond_up.append("reclaim the 200-day and hold above it")
+        if high_52w and pval < float(high_52w):
+            cond_up.append("establish higher highs/lows and work toward prior 52W high")
+        if t_qual not in ("uptrend", "strong uptrend"):
+            cond_up.append("shift from distribution to accumulation (trend improvement)")
+        # Invalidation
+        if sma50 and pval > float(sma50):
+            invalidation.append("decisive close back below the 50-day (trend failure)")
+        if sentiments and news_score < -0.2:
+            invalidation.append("deterioration in news tone (guide cut or adverse headline)")
+
     why_moving = ", ".join(dict.fromkeys([r for r in reasons_moving if r])) or "no strong driver detected"
     why_continue = ", ".join(dict.fromkeys([r for r in reasons_continue if r])) or "needs fresh catalysts or improvement"
 
+    # Compose multi-part narrative
+    src_list = ", ".join(sorted(set(srcs)))[:140]
+    bull_summary = "; ".join(bull_stories[:3])
+    bear_summary = "; ".join(bear_stories[:3])
+    cond_up_txt = "; ".join(cond_up) or "continued constructive price action and supportive news"
+    invalid_txt = "; ".join(invalidation) or "pattern failure and negative guidance"
+
+    # Company context (what they do)
+    name = getattr(price, "long_name", None) or getattr(price, "ticker", "")
+    sec_txt = getattr(price, "sector", None) or ""
+    ind_txt = getattr(price, "industry", None) or ""
+    summary = getattr(price, "long_business_summary", None)
+    about_txt = None
+    try:
+        if summary:
+            first_sentence = summary.strip().split(". ")[0].strip()
+            if len(first_sentence) > 220:
+                first_sentence = first_sentence[:217].rstrip() + "..."
+            about_txt = f"{name} — {sec_txt}/{ind_txt}. {first_sentence}"
+        else:
+            about_txt = f"{name} — {sec_txt}/{ind_txt}".strip().rstrip(" -/")
+    except Exception:
+        about_txt = f"{name} — {sec_txt}/{ind_txt}".strip().rstrip(" -/")
+
     ai_analysis = (
-        f"Why it's moving: {why_moving}. "
-        f"Why it can continue: {why_continue}. "
-        f"Bottom line: {label} based on the qualitative criteria you outlined."
+        (f"About the company: {about_txt}. " if about_txt else "")
+        + f"Why it's moving: {why_moving}. "
+        + f"Why it can continue: {why_continue}. "
+        + f"Bull case themes: {bull_summary or 'no clear bullish story from headlines'}. "
+        + f"Bear case/risks: {bear_summary or 'no clear bearish story from headlines'}. "
+        + f"For upside to play out: {cond_up_txt}. "
+        + f"What would invalidate: {invalid_txt}. "
+        + f"Sources scanned: {src_list or 'multiple aggregators'}. "
+        + f"Bottom line: {label} with {round(confidence,2)}% confidence."
         + (f" Predicted price (near-term): ${predicted:.2f}." if predicted else "")
     )
 

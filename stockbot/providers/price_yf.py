@@ -21,6 +21,7 @@ class PriceSnapshot:
     sector: str | None = None
     industry: str | None = None
     long_name: str | None = None
+    long_business_summary: str | None = None
 
 @dataclass
 class Technicals:
@@ -105,6 +106,7 @@ def fetch_price_and_fundamentals(ticker: str) -> PriceSnapshot:
         sector=info.get("sector"),
         industry=info.get("industry"),
         long_name=info.get("longName"),
+        long_business_summary=info.get("longBusinessSummary"),
     )
 
 def fetch_technicals(ticker: str, period: str = "1y", interval: str = "1d") -> Technicals:

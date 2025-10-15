@@ -25,6 +25,7 @@ def _ds_to_dict(p: PriceSnapshot, t: Technicals, news: List[NewsItem]) -> Dict[s
             "sector": getattr(p, "sector", None),
             "industry": getattr(p, "industry", None),
             "long_name": getattr(p, "long_name", None),
+            "business_summary": getattr(p, "long_business_summary", None),
         },
         "technicals": {
             "sma20": t.sma20,

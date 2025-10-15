@@ -4,7 +4,7 @@ Real-time(ish) stock analysis that fetches market data, fundamentals, and news i
 
 ## Features (initial)
 - Clean web UI (Tailwind) at `/` powered by FastAPI
-- Parallel data fetching (price/technicals via Yahoo Finance, news via NewsAPI if key provided)
+- Parallel data fetching (price/technicals via Yahoo Finance, news via NewsAPI; optionally Finnhub + Polygon)
 - Basics: market cap, PE, EPS TTM, dividend yield
 - Technicals: 20/50/200 SMA, RSI(14), trend score
 - Earnings date awareness (risk weight if close)
@@ -21,8 +21,8 @@ Real-time(ish) stock analysis that fetches market data, fundamentals, and news i
 - Python 3.10+
 - API keys (optional, improves data quality/coverage):
   - NEWSAPI_KEY (https://newsapi.org) for headlines
-  - FINNHUB_KEY (optional, future)
-  - POLYGON_KEY (optional, future)
+  - FINNHUB_KEY (optional; enables additional headlines via Finnhub)
+  - POLYGON_KEY (optional; enables additional headlines via Polygon)
   - OPENAI_API_KEY (optional, future; for advanced summarization)
 
 ## Setup

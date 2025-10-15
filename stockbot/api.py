@@ -9,6 +9,8 @@ from .config import Settings
 from .utils.asyncio_tools import run_with_timeout
 from .providers.price_yf import fetch_price_and_fundamentals, fetch_technicals, PriceSnapshot, Technicals
 from .providers.news_newsapi import fetch_news_newsapi, NewsItem
+from .providers.news_finnhub import fetch_news_finnhub
+from .providers.news_polygon import fetch_news_polygon
 from .analysis import recommend
 
 app = FastAPI(title="StockBotVF API", version="0.1.0")
@@ -36,6 +38,7 @@ def _ds_to_dict(p: PriceSnapshot, t: Technicals, news: List[NewsItem]) -> Dict[s
             "sector": getattr(p, "sector", None),
             "industry": getattr(p, "industry", None),
             "long_name": getattr(p, "long_name", None),
+            "business_summary": getattr(p, "long_business_summary", None),
         },
         "technicals": {
             "sma20": t.sma20,
@@ -80,26 +83,91 @@ async def analyze(
 
     async def gather_all():
         # Fetch price and technicals in parallel first
-        p_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker_norm), per_fetch_timeout))
-        t_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_technicals, ticker_norm), per_fetch_timeout))
+        p_task = asyncio.create_task(
+            run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker_norm), per_fetch_timeout)
+        )
+        t_task = asyncio.create_task(
+            run_with_timeout(asyncio.to_thread(fetch_technicals, ticker_norm), per_fetch_timeout)
+        )
 
         p = await p_task
-        # Start news after we know the company name/industry to build a finance-focused query
-        n_task = asyncio.create_task(
-            run_with_timeout(
-                asyncio.to_thread(
-                    fetch_news_newsapi,
-                    ticker_norm,
-                    settings.newsapi_key,
-                    max_news,
-                    getattr(p, "long_name", None),
-                    getattr(p, "industry", None),
-                ),
-                per_fetch_timeout,
+
+        # Start multiple news providers in parallel (if keys available)
+        news_tasks = []
+        # NewsAPI – uses company name/industry for a focused query
+        news_tasks.append(
+            asyncio.create_task(
+                run_with_timeout(
+                    asyncio.to_thread(
+                        fetch_news_newsapi,
+                        ticker_norm,
+                        settings.newsapi_key,
+                        max_news,
+                        getattr(p, "long_name", None),
+                        getattr(p, "industry", None),
+                    ),
+                    per_fetch_timeout,
+                )
             )
         )
+        if getattr(settings, "finnhub_key", None):
+            news_tasks.append(
+                asyncio.create_task(
+                    run_with_timeout(
+                        asyncio.to_thread(
+                            fetch_news_finnhub,
+                            ticker_norm,
+                            settings.finnhub_key,
+                            max_news,
+                        ),
+                        per_fetch_timeout,
+                    )
+                )
+            )
+        if getattr(settings, "polygon_key", None):
+            news_tasks.append(
+                asyncio.create_task(
+                    run_with_timeout(
+                        asyncio.to_thread(
+                            fetch_news_polygon,
+                            ticker_norm,
+                            settings.polygon_key,
+                            max_news,
+                        ),
+                        per_fetch_timeout,
+                    )
+                )
+            )
+
         t = await t_task
-        news = await n_task
+
+        # Await all news tasks (degrade gracefully on failures)
+        news_lists = []
+        for nt in news_tasks:
+            try:
+                news_lists.append(await nt)
+            except Exception:
+                news_lists.append([])
+
+        # Merge and dedupe by url/title
+        combined = []
+        seen = set()
+        def _key(n):
+            u = (getattr(n, "url", None) or "").strip().lower()
+            if u:
+                return ("u", u)
+            t = (getattr(n, "title", None) or "").strip().lower()
+            return ("t", t)
+
+        for lst in news_lists:
+            for n in lst or []:
+                k = _key(n)
+                if not k or k in seen:
+                    continue
+                seen.add(k)
+                combined.append(n)
+
+        news = combined[: max_news]
         return p, t, news
 
     try:
