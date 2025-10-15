@@ -107,9 +107,12 @@
       for(const sym of featuredTickers){
         try{
           const res = await fetch(`/analyze?ticker=${encodeURIComponent(sym)}&risk=medium&max_news=3&timeout=180`);
-          const data = await res.json();
+          let data = null;
+          const ctype = res.headers.get('content-type') || '';
+          if(ctype.includes('application/json')){ data = await res.json(); }
+          else { const text = await res.text(); data = { error: text } }
           if(res.ok){ renderFeaturedCard(sym, data); }
-          else{ renderFeaturedError(sym, data.error || 'Unavailable'); }
+          else{ renderFeaturedError(sym, (data && data.error) ? data.error : (res.statusText || 'Unavailable')); }
         }catch(err){ renderFeaturedError(sym, 'Unavailable'); }
       }
     }
@@ -162,13 +165,16 @@
       el('results').classList.add('hidden');
       el('loading').classList.remove('hidden');
 
-      const ticker = el('ticker').value.trim() || 'AAPL';
+      const ticker = (el('ticker').value.trim() || 'AAPL').toUpperCase();
 
       try {
         const url = `/analyze?ticker=${encodeURIComponent(ticker)}&timeout=240`;
         const res = await fetch(url);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || res.statusText);
+        let data = null;
+        const ctype = res.headers.get('content-type') || '';
+        if(ctype.includes('application/json')){ data = await res.json(); }
+        else { const text = await res.text(); data = { error: text } }
+        if (!res.ok) throw new Error((data && data.error) ? data.error : (res.statusText || 'Request failed'));
 
         // Recommendation
         const r = data.recommendation || {};

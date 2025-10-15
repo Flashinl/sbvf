@@ -71,10 +71,13 @@ async def analyze(
 ):
     settings = Settings.load()
 
+    # Normalize ticker early
+    ticker_norm = (ticker or "").strip().upper()
+
     async def gather_all():
         # Fetch price and technicals in parallel first
-        p_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker), settings.per_request_timeout_seconds))
-        t_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_technicals, ticker), settings.per_request_timeout_seconds))
+        p_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker_norm), settings.per_request_timeout_seconds))
+        t_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_technicals, ticker_norm), settings.per_request_timeout_seconds))
 
         p = await p_task
         # Start news after we know the company name/industry to build a finance-focused query
@@ -82,7 +85,7 @@ async def analyze(
             run_with_timeout(
                 asyncio.to_thread(
                     fetch_news_newsapi,
-                    ticker,
+                    ticker_norm,
                     settings.newsapi_key,
                     max_news,
                     getattr(p, "long_name", None),
