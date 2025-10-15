@@ -109,15 +109,18 @@ async def analyze(
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-    rec = recommend(p, t, news, risk=risk)
-
-    payload = _ds_to_dict(p, t, news)
-    payload["recommendation"] = {
-        "label": rec.label,
-        "confidence": rec.confidence,
-        "rationale": rec.rationale,
-        "ai_analysis": getattr(rec, "ai_analysis", ""),
-        "predicted_price": getattr(rec, "predicted_price", None),
-    }
-    return payload
+    try:
+        rec = recommend(p, t, news, risk=risk)
+        payload = _ds_to_dict(p, t, news)
+        payload["recommendation"] = {
+            "label": rec.label,
+            "confidence": rec.confidence,
+            "rationale": rec.rationale,
+            "ai_analysis": getattr(rec, "ai_analysis", ""),
+            "predicted_price": getattr(rec, "predicted_price", None),
+        }
+        return payload
+    except Exception as e:
+        # Ensure we always return JSON even if recommendation/serialization fails
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
