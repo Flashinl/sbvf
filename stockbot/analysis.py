@@ -232,12 +232,32 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         if _has_any(t, earnings_keys_neg) or _has_any(t, regulatory_keys) or _has_any(t, financing_keys):
             bear_stories.append(t)
 
+    # Domain-specific signal flags for more concrete reasoning
+    lease_keys = ["lease", "leases", "leased", "tenant", "tenants", "lease agreement"]
+    capacity_keys = ["capacity", "buildout", "expansion", "utilization", "deployment", "ramp", "ramping"]
+    recognition_keys = ["revenue recognition", "recognized", "recognition", "noi"]
+    contract_keys = ["contract", "order", "award", "deal", "agreement"]
+    guidance_keys = ["guidance", "outlook", "raises", "cuts"]
+    has_lease = any(_has_any(t, lease_keys) for t in titles)
+    has_contract = any(_has_any(t, contract_keys) for t in titles)
+    has_capacity = any(_has_any(t, capacity_keys) for t in titles)
+    has_recognition = any(_has_any(t, recognition_keys) for t in titles)
+    has_guidance = any(_has_any(t, guidance_keys) for t in titles)
+    has_coreweave = any("coreweave" in t for t in titles)
+
     reasons_moving: list[str] = []
     reasons_continue: list[str] = []
 
     # Why it's moving
     if hits:
-        reasons_moving.append("fresh catalysts (e.g., contract/partnership/funding) in headlines")
+        if has_lease:
+            reasons_moving.append("lease/tenant headlines (commercial wins)")
+        elif has_contract:
+            reasons_moving.append("new contract/order/award headlines")
+        else:
+            reasons_moving.append("fresh catalysts (e.g., partnership/funding)")
+    if has_coreweave:
+        reasons_moving.append("CoreWeave-related developments")
     if sentiments:
         if news_score > 0.05:
             reasons_moving.append("news tone skewing positive")
@@ -259,6 +279,23 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
                 reasons_moving.append("flow around earnings timing")
     except Exception:
         pass
+
+    # Timing expectations and watchlist
+    watch: list[str] = []
+    if has_lease:
+        watch.append("new tenant/lease announcements")
+    if has_recognition or has_capacity:
+        watch.append("pace of capacity ramp and revenue recognition")
+    if has_guidance:
+        watch.append("quarterly results and guidance updates")
+    else:
+        watch.append("quarterly results")
+
+    timing_msgs: list[str] = []
+    if has_lease or has_contract:
+        timing_msgs.append("moves in days–weeks on new lease/contract news")
+    if has_recognition or has_capacity:
+        timing_msgs.append("larger valuation moves over 3–12 months as capacity is utilized and revenue recognized")
 
     # Why it can continue
     if any(term in sec or term in ind for term in megatrend_terms):
@@ -322,7 +359,9 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         (f"About the company: {about_txt}. " if about_txt else "")
         + f"Why it's moving: {why_moving}. "
         + (f"Specific catalysts: { '; '.join(catalyst_details[:3])}. " if catalyst_details else "")
+        + (f"Timing: {'; '.join(timing_msgs)}. " if timing_msgs else "")
         + f"Why it can continue: {why_continue}. "
+        + (f"What to watch: { '; '.join(watch[:4])}. " if watch else "")
         + f"Bull case themes: {bull_summary or 'no clear bullish story from headlines'}. "
         + f"Bear case/risks: {bear_summary or 'no clear bearish story from headlines'}. "
         + f"For upside to play out: {cond_up_txt}. "
