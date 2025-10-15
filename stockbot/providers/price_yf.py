@@ -44,16 +44,63 @@ def fetch_price_and_fundamentals(ticker: str) -> PriceSnapshot:
     except Exception:
         pass
 
+    # Robust current price resolution
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    if not price:
+        try:
+            fi = getattr(t, "fast_info", None)
+            # fast_info can be dict-like or object-like depending on yfinance version
+            def _fi_get(k):
+                if fi is None:
+                    return None
+                if isinstance(fi, dict):
+                    return fi.get(k)
+                return getattr(fi, k, None)
+            for k in ("last_price", "lastPrice", "regularMarketPrice", "lastClose", "previousClose"):
+                price = _fi_get(k)
+                if price:
+                    break
+        except Exception:
+            price = None
+    if not price:
+        try:
+            hist = t.history(period="5d", interval="1d", auto_adjust=False)
+            if hist is not None and not hist.empty:
+                price = float(hist["Close"].iloc[-1])
+        except Exception:
+            price = None
+
+    # Fill additional fields from fast_info if missing
+    market_cap = info.get("marketCap")
+    fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+    fifty_two_week_low = info.get("fiftyTwoWeekLow")
+    try:
+        fi = getattr(t, "fast_info", None)
+        def _fi_get(k):
+            if fi is None:
+                return None
+            if isinstance(fi, dict):
+                return fi.get(k)
+            return getattr(fi, k, None)
+        if market_cap is None:
+            market_cap = _fi_get("market_cap") or _fi_get("marketCap")
+        if fifty_two_week_high is None:
+            fifty_two_week_high = _fi_get("year_high") or _fi_get("fiftyTwoWeekHigh")
+        if fifty_two_week_low is None:
+            fifty_two_week_low = _fi_get("year_low") or _fi_get("fiftyTwoWeekLow")
+    except Exception:
+        pass
+
     return PriceSnapshot(
         ticker=ticker,
-        price=info.get("currentPrice") or info.get("regularMarketPrice"),
+        price=float(price) if price is not None else None,
         currency=info.get("currency"),
-        market_cap=info.get("marketCap"),
+        market_cap=float(market_cap) if market_cap is not None else None,
         trailing_pe=info.get("trailingPE"),
         eps_ttm=info.get("trailingEps"),
         dividend_yield=info.get("dividendYield"),
-        fifty_two_week_high=info.get("fiftyTwoWeekHigh"),
-        fifty_two_week_low=info.get("fiftyTwoWeekLow"),
+        fifty_two_week_high=float(fifty_two_week_high) if fifty_two_week_high is not None else None,
+        fifty_two_week_low=float(fifty_two_week_low) if fifty_two_week_low is not None else None,
         earnings_date=earnings_date,
         sector=info.get("sector"),
         industry=info.get("industry"),

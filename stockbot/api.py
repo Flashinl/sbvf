@@ -72,10 +72,25 @@ async def analyze(
     settings = Settings.load()
 
     async def gather_all():
+        # Fetch price and technicals in parallel first
         p_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker), settings.per_request_timeout_seconds))
         t_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_technicals, ticker), settings.per_request_timeout_seconds))
-        n_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_news_newsapi, ticker, settings.newsapi_key, max_news), settings.per_request_timeout_seconds))
+
         p = await p_task
+        # Start news after we know the company name/industry to build a finance-focused query
+        n_task = asyncio.create_task(
+            run_with_timeout(
+                asyncio.to_thread(
+                    fetch_news_newsapi,
+                    ticker,
+                    settings.newsapi_key,
+                    max_news,
+                    getattr(p, "long_name", None),
+                    getattr(p, "industry", None),
+                ),
+                settings.per_request_timeout_seconds,
+            )
+        )
         t = await t_task
         news = await n_task
         return p, t, news

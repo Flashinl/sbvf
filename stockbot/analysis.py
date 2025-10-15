@@ -191,44 +191,56 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         if predicted is not None and predicted <= 0:
             predicted = None
 
-    # AI-style narrative prioritizing qualitative reasoning (no indicator numbers)
+    # AI-style narrative focusing on causes (why up) and persistence (why continue)
     t_qual = _qualitative_trend(trend)
-    story_bits = []
-    # Structure and momentum
-    if t_qual in ("uptrend", "strong uptrend"):
-        story_bits.append("price structure is constructive and momentum is improving")
-    elif t_qual in ("downtrend", "strong downtrend"):
-        story_bits.append("price structure is weak and momentum is deteriorating")
-    else:
-        story_bits.append("price structure is consolidating")
-    # Hidden-gem themes
-    if mc is not None and 2e8 <= mc <= 5e9:
-        story_bits.append("small/mid-cap profile")
-    if any(term in sec or term in ind for term in megatrend_terms):
-        story_bits.append("aligned with a structural megatrend")
-    if dd_txt:
-        story_bits.append("room to recover from prior highs")
+    ed = getattr(price, "earnings_date", None)
+    reasons_moving = []
+    reasons_continue = []
+
+    # Why it's moving
     if hits:
-        story_bits.append("recent potential catalysts")
-    # Sentiment
+        reasons_moving.append("fresh catalysts (e.g., contract/partnership/funding) in headlines")
     if sentiments:
         if news_score > 0.05:
-            story_bits.append("headlines lean constructive")
+            reasons_moving.append("news tone skewing positive")
         elif news_score < -0.05:
-            story_bits.append("headlines lean cautious")
-        else:
-            story_bits.append("headlines are balanced")
+            reasons_moving.append("news tone cautious")
+    if t_qual in ("uptrend", "strong uptrend"):
+        reasons_moving.append("accumulation — buyers in control")
+    elif t_qual in ("downtrend", "strong downtrend"):
+        reasons_moving.append("distribution — sellers pressing")
+    else:
+        reasons_moving.append("range/consolidation resolving")
+    # Earnings proximity
+    try:
+        if ed is not None:
+            from datetime import datetime as _dt
+            dt_now = _dt.utcnow()
+            delta_days = (ed - dt_now).days
+            if -7 <= delta_days <= 14:
+                reasons_moving.append("flow around earnings timing")
+    except Exception:
+        pass
 
-    # Clean up phrasing
-    bits = [b.strip() for b in story_bits if b and b.strip()]
-    # de-duplicate while preserving order
-    dedup_bits = []
-    for b in bits:
-        if b not in dedup_bits:
-            dedup_bits.append(b)
+    # Why it can continue
+    if any(term in sec or term in ind for term in megatrend_terms):
+        reasons_continue.append("exposure to a structural megatrend")
+    if mc is not None and 2e8 <= mc <= 5e9:
+        reasons_continue.append("small/mid-cap runway if execution continues")
+    if price_now and high_52w and (1 - float(price_now)/float(high_52w)) >= 0.2:
+        reasons_continue.append("room to recover toward prior highs if momentum sustains")
+    if hits:
+        reasons_continue.append("pipeline of potential follow-on catalysts")
+    if t_qual in ("uptrend", "strong uptrend"):
+        reasons_continue.append("constructive structure until it fails")
+
+    # Compose narrative
+    why_moving = ", ".join(dict.fromkeys([r for r in reasons_moving if r])) or "no strong driver detected"
+    why_continue = ", ".join(dict.fromkeys([r for r in reasons_continue if r])) or "needs fresh catalysts or improvement"
 
     ai_analysis = (
-        f"Setup: {', '.join(dedup_bits)}. "
+        f"Why it's moving: {why_moving}. "
+        f"Why it can continue: {why_continue}. "
         f"Bottom line: {label} based on the qualitative criteria you outlined."
         + (f" Predicted price (near-term): ${predicted:.2f}." if predicted else "")
     )
