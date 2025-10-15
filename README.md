@@ -47,7 +47,7 @@ cp .env.example .env
 
 ## Usage (CLI)
 ```
-python -m stockbot.main AAPL --horizon 3m --risk medium --benchmark SPY --timeout 240 --max-news 12
+python -m stockbot.main AAPL --risk medium --max-news 12
 ```
 
 ## Web API & UI

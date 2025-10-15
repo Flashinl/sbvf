@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: stockbotvf
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn stockbot.api:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: NEWSAPI_KEY
+        sync: false
