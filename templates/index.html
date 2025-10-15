@@ -106,14 +106,17 @@
       ).join('');
       for(const sym of featuredTickers){
         try{
-          const res = await fetch(`/analyze?ticker=${encodeURIComponent(sym)}&risk=medium&max_news=3&timeout=180`);
+          const controller = new AbortController();
+          const tid = setTimeout(()=>controller.abort(), 50000);
+          const res = await fetch(`/analyze?ticker=${encodeURIComponent(sym)}&risk=medium&max_news=3&timeout=45`, { signal: controller.signal });
+          clearTimeout(tid);
           let data = null;
           const ctype = res.headers.get('content-type') || '';
           if(ctype.includes('application/json')){ data = await res.json(); }
           else { const text = await res.text(); data = { error: text } }
           if(res.ok){ renderFeaturedCard(sym, data); }
           else{ renderFeaturedError(sym, (data && data.error) ? data.error : (res.statusText || 'Unavailable')); }
-        }catch(err){ renderFeaturedError(sym, 'Unavailable'); }
+        }catch(err){ renderFeaturedError(sym, 'Timeout or unavailable'); }
       }
     }
     function renderFeaturedCard(sym, data){
@@ -168,8 +171,11 @@
       const ticker = (el('ticker').value.trim() || 'AAPL').toUpperCase();
 
       try {
-        const url = `/analyze?ticker=${encodeURIComponent(ticker)}&timeout=240`;
-        const res = await fetch(url);
+        const controller = new AbortController();
+        const tid = setTimeout(()=>controller.abort(), 65000);
+        const url = `/analyze?ticker=${encodeURIComponent(ticker)}&max_news=6&timeout=60`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(tid);
         let data = null;
         const ctype = res.headers.get('content-type') || '';
         if(ctype.includes('application/json')){ data = await res.json(); }

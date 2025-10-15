@@ -73,11 +73,15 @@ async def analyze(
 
     # Normalize ticker early
     ticker_norm = (ticker or "").strip().upper()
+    # Cap the total request time to stay under Render's gateway timeout
+    effective_timeout = min(int(timeout or 60), 90)
+    # Keep per-fetch time bounded so all three fetches complete in time
+    per_fetch_timeout = min(getattr(settings, "per_request_timeout_seconds", 60), max(15, effective_timeout // 2))
 
     async def gather_all():
         # Fetch price and technicals in parallel first
-        p_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker_norm), settings.per_request_timeout_seconds))
-        t_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_technicals, ticker_norm), settings.per_request_timeout_seconds))
+        p_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_price_and_fundamentals, ticker_norm), per_fetch_timeout))
+        t_task = asyncio.create_task(run_with_timeout(asyncio.to_thread(fetch_technicals, ticker_norm), per_fetch_timeout))
 
         p = await p_task
         # Start news after we know the company name/industry to build a finance-focused query
@@ -91,7 +95,7 @@ async def analyze(
                     getattr(p, "long_name", None),
                     getattr(p, "industry", None),
                 ),
-                settings.per_request_timeout_seconds,
+                per_fetch_timeout,
             )
         )
         t = await t_task
@@ -99,7 +103,7 @@ async def analyze(
         return p, t, news
 
     try:
-        p, t, news = await run_with_timeout(gather_all(), timeout)
+        p, t, news = await run_with_timeout(gather_all(), effective_timeout)
     except asyncio.TimeoutError:
         return JSONResponse(status_code=504, content={"error": "Timed out"})
     except Exception as e:
