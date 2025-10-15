@@ -1,7 +1,8 @@
 from __future__ import annotations
 import asyncio
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.templating import Jinja2Templates
 from typing import Any, Dict, List
 
 from .config import Settings
@@ -11,6 +12,12 @@ from .providers.news_newsapi import fetch_news_newsapi, NewsItem
 from .analysis import recommend
 
 app = FastAPI(title="StockBotVF API", version="0.1.0")
+templates = Jinja2Templates(directory="templates")
+
+
+@app.get("/")
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 def _ds_to_dict(p: PriceSnapshot, t: Technicals, news: List[NewsItem]) -> Dict[str, Any]:
