@@ -36,10 +36,8 @@
 
     <section id="results" class="mt-6 hidden">
       <div id="rec" class="mb-6 p-4 rounded-xl border border-green-800 bg-neutral-900"></div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        <div id="technicals" class="p-4 rounded-xl border border-green-800 bg-neutral-900"></div>
-        <div id="news" class="p-4 rounded-xl border border-green-800 bg-neutral-900 md:col-span-1"></div>
+      <div class="grid grid-cols-1 gap-4">
+        <div id="news" class="p-4 rounded-xl border border-green-800 bg-neutral-900"></div>
       </div>
     </section>
 
@@ -117,15 +115,14 @@
     }
     function renderFeaturedCard(sym, data){
       const r = data.recommendation || {};
-      const price = data.price?.price;
       const badge = (lbl)=>{ const map = { Buy: 'bg-green-600 text-black', Hold: 'bg-neutral-700 text-green-200', Sell: 'bg-red-600 text-white' }; return `<span class=\"px-2 py-0.5 rounded text-xs ${map[lbl]||'bg-neutral-700'}\">${lbl||'\u2014'}</span>`; };
+      const tgt = r.predicted_price != null ? `$${fmt.format(r.predicted_price)}` : '\u2014';
       const html = `
         <div class=\"flex items-center justify-between\">
           <div>
             <div class=\"text-sm text-green-500\">${sym}</div>
-            <div class=\"text-xl font-semibold text-green-300\">$${price!=null? fmt.format(price):'-'} ${badge(r.label)}</div>
+            <div class=\"text-xl font-semibold text-green-300\">Target ${tgt} ${badge(r.label)}</div>
           </div>
-          <div class=\"text-sm text-green-500\">${fmt.format(r.confidence||0)}%</div>
         </div>
         <div class=\"text-sm text-green-200 mt-2 line-clamp-3\">${(r.ai_analysis||'').slice(0,160)}${(r.ai_analysis||'').length>160?'\u2026':''}</div>`;
       const card = document.getElementById(`card-${sym}`);
@@ -175,36 +172,19 @@
 
         // Recommendation
         const r = data.recommendation || {};
+        const predicted = r.predicted_price != null ? `$${fmt.format(r.predicted_price)}` : '—';
         el('rec').innerHTML = `
           <div class=\"flex items-center justify-between\">
             <div>
               <div class=\"text-sm text-green-500\">${data.price?.ticker || ticker}</div>
-              <div class=\"text-2xl font-semibold text-green-400\">${r.label || '—'} <span class=\"text-green-500 text-base\">(${fmt.format(r.confidence || 0)}%)</span></div>
+              <div class=\"text-2xl font-semibold text-green-400\">${r.label || '—'}</div>
             </div>
-            <div class=\"text-2xl font-semibold text-green-300\">$${fmt.format(data.price?.price)}</div>
+            <div class=\"text-right\">
+              <div class=\"text-xs text-green-500\">Predicted Price</div>
+              <div class=\"text-2xl font-semibold text-green-300\">${predicted}</div>
+            </div>
           </div>
           <p class=\"text-sm text-green-200 mt-2\">${(r.ai_analysis || r.rationale || '').split('\n').map(x=>`<span class=\"block\">${x}</span>`).join('')}</p>`;
-
-
-        // Technicals
-        const t = data.technicals || {};
-        const rows = [];
-        const pushRow = (label, value) => {
-          if (value !== null && value !== undefined && value !== '-' && value !== '') {
-            rows.push(row(label, value));
-          }
-        };
-        pushRow('Price', data.price?.price ? `$${fmt.format(data.price.price)}` : null);
-        pushRow('SMA20', t.sma20);
-        pushRow('SMA50', t.sma50);
-        pushRow('SMA200', t.sma200);
-        pushRow('RSI(14)', t.rsi14);
-        pushRow('Trend Score', t.trend_score);
-        pushRow('52W High', data.price?.fifty_two_week_high);
-        pushRow('52W Low', data.price?.fifty_two_week_low);
-        el('technicals').innerHTML = rows.length
-          ? card('Technical Stats', rows.join(''))
-          : card('Technical Stats', '<div class="text-sm text-green-500">No technical data</div>');
 
         // News
         const list = (data.news || []).slice(0, 10).map(n => `
@@ -224,12 +204,12 @@
       }
     }
 
-    // Clicking Analyze opens a new tab with pre-filled params
+    // Clicking Analyze runs in-page (no new tab) and hides homepage
     el('analyzeBtn').addEventListener('click', (e)=>{
       e.preventDefault();
-      const ticker = el('ticker').value.trim() || 'AAPL';
-      const url = `/?ticker=${encodeURIComponent(ticker)}`;
-      window.open(url, '_blank');
+      const feat = document.getElementById('featured');
+      if(feat) feat.classList.add('hidden');
+      run();
     });
 
     // Default ticker on initial load

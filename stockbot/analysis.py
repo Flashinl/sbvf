@@ -19,6 +19,7 @@ class Recommendation:
     confidence: float  # 0..100
     rationale: str
     ai_analysis: str
+    predicted_price: float | None = None
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -169,41 +170,67 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         rationale_lines.append("Mixed signals")
     rationale = "\n".join(f"• {line}" for line in rationale_lines)
 
-    # AI-style narrative analysis
-    t_qual = _qualitative_trend(trend)
-    rsi_txt = "unknown RSI"
-    if rsi is not None:
-        if rsi < 30: rsi_txt = f"oversold RSI ({rsi:.0f})"
-        elif rsi > 70: rsi_txt = f"overbought RSI ({rsi:.0f})"
-        else: rsi_txt = f"neutral RSI ({rsi:.0f})"
-    sma_txt = ""
-    if all(v is not None for v in [sma20, sma50, sma200]):
-        if sma20 > sma50 > sma200:
-            sma_txt = " with a constructive 20>50>200-day moving-average stack"
-        elif sma20 < sma50 < sma200:
-            sma_txt = " with a deteriorating 20<50<200-day moving-average stack"
-    ns_txt = " and headlines are balanced"
-    if sentiments:
-        if news_score > 0.05: ns_txt = " and headlines skew positive"
-        elif news_score < -0.05: ns_txt = " and headlines skew negative"
+    # Predicted price (simple heuristic target)
+    predicted = None
+    if price_now and price_now > 0:
+        if label == "Buy":
+            # Aim halfway to 52W high if available; otherwise a default 15-25% gain scaled by trend/catalysts
+            base_up = 0.15 + (0.1 if trend > 0.6 else 0.05 if trend > 0.25 else 0)
+            base_up += 0.05 if hits else 0
+            base_up += 0.03 if (mc is not None and 2e8 <= mc <= 5e9 and any(term in sec or term in ind for term in megatrend_terms)) else 0
+            if high_52w and high_52w > price_now:
+                target = price_now + 0.5 * (high_52w - price_now)
+                predicted = max(target, price_now * (1 + base_up))
+                predicted = min(predicted, high_52w * 0.98)
+            else:
+                predicted = price_now * (1 + base_up)
+        elif label == "Hold":
+            predicted = price_now * (1 + (0.05 if trend > 0 else -0.05))
+        else:  # Sell
+            predicted = price_now * (1 - (0.10 if trend < -0.25 else 0.05))
+        if predicted is not None and predicted <= 0:
+            predicted = None
 
-    # Hidden-gem paragraph
-    hidden_txts = []
+    # AI-style narrative prioritizing qualitative reasoning (no indicator numbers)
+    t_qual = _qualitative_trend(trend)
+    story_bits = []
+    # Structure and momentum
+    if t_qual in ("uptrend", "strong uptrend"):
+        story_bits.append("price structure is constructive and momentum is improving")
+    elif t_qual in ("downtrend", "strong downtrend"):
+        story_bits.append("price structure is weak and momentum is deteriorating")
+    else:
+        story_bits.append("price structure is consolidating")
+    # Hidden-gem themes
     if mc is not None and 2e8 <= mc <= 5e9:
-        hidden_txts.append("small/mid-cap range")
-    if dd_txt:
-        hidden_txts.append(dd_txt)
+        story_bits.append("small/mid-cap profile")
     if any(term in sec or term in ind for term in megatrend_terms):
-        hidden_txts.append("megatrend alignment")
+        story_bits.append("aligned with a structural megatrend")
+    if dd_txt:
+        story_bits.append("room to recover from prior highs")
     if hits:
-        hidden_txts.append("recent catalyst in headlines")
-    overlay_txt = " "
-    if hidden_txts:
-        overlay_txt = " Hidden-gem screen: " + ", ".join(hidden_txts) + "."
+        story_bits.append("recent potential catalysts")
+    # Sentiment
+    if sentiments:
+        if news_score > 0.05:
+            story_bits.append("headlines lean constructive")
+        elif news_score < -0.05:
+            story_bits.append("headlines lean cautious")
+        else:
+            story_bits.append("headlines are balanced")
+
+    # Clean up phrasing
+    bits = [b.strip() for b in story_bits if b and b.strip()]
+    # de-duplicate while preserving order
+    dedup_bits = []
+    for b in bits:
+        if b not in dedup_bits:
+            dedup_bits.append(b)
 
     ai_analysis = (
-        f"Momentum currently suggests {t_qual}{sma_txt}. The setup is supported by {rsi_txt}{ns_txt}."
-        f"{overlay_txt} Given a {risk}-risk profile, this points to a {label.lower()} with {confidence:.0f}% confidence."
+        f"Setup: {', '.join(dedup_bits)}. "
+        f"Bottom line: {label} based on the qualitative criteria you outlined."
+        + (f" Predicted price (near-term): ${predicted:.2f}." if predicted else "")
     )
 
     return Recommendation(
@@ -211,4 +238,5 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         confidence=round(confidence, 2),
         rationale=rationale,
         ai_analysis=ai_analysis,
+        predicted_price=(float(predicted) if predicted is not None else None),
     )
