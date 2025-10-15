@@ -33,6 +33,9 @@ def _ds_to_dict(p: PriceSnapshot, t: Technicals, news: List[NewsItem]) -> Dict[s
             "fifty_two_week_high": p.fifty_two_week_high,
             "fifty_two_week_low": p.fifty_two_week_low,
             "earnings_date": p.earnings_date.isoformat() if p.earnings_date else None,
+            "sector": getattr(p, "sector", None),
+            "industry": getattr(p, "industry", None),
+            "long_name": getattr(p, "long_name", None),
         },
         "technicals": {
             "sma20": t.sma20,

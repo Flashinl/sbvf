@@ -18,6 +18,9 @@ class PriceSnapshot:
     fifty_two_week_high: float | None
     fifty_two_week_low: float | None
     earnings_date: datetime | None
+    sector: str | None = None
+    industry: str | None = None
+    long_name: str | None = None
 
 @dataclass
 class Technicals:
@@ -52,6 +55,9 @@ def fetch_price_and_fundamentals(ticker: str) -> PriceSnapshot:
         fifty_two_week_high=info.get("fiftyTwoWeekHigh"),
         fifty_two_week_low=info.get("fiftyTwoWeekLow"),
         earnings_date=earnings_date,
+        sector=info.get("sector"),
+        industry=info.get("industry"),
+        long_name=info.get("longName"),
     )
 
 def fetch_technicals(ticker: str, period: str = "1y", interval: str = "1d") -> Technicals:
