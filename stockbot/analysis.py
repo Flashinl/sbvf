@@ -116,17 +116,24 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
             elif dd > 0.9:
                 hidden_score -= 0.05  # possibly distressed
 
-    # Catalyst detection from headlines
+    # Catalyst detection from headlines (capture details to cite specifics)
     catalyst_keywords = [
         "award", "contract", "partnership", "deal", "grant", "funding", "order",
         "acquisition", "merger", "approval", "phase", "secures", "expansion",
-        "agreement", "strategic", "pilot", "deployment", "doe", "dod", "nasa"
+        "agreement", "strategic", "pilot", "deployment", "doe", "dod", "nasa",
+        "sponsor", "sponsorship", "customer", "loi", "license", "distribution"
     ]
     hits = []
+    catalyst_details = []
     for n in news or []:
-        title = (getattr(n, "title", "") or "").lower()
-        if any(k in title for k in catalyst_keywords):
-            hits.append(title)
+        raw_title = (getattr(n, "title", "") or "").strip()
+        title_lc = raw_title.lower()
+        if any(k in title_lc for k in catalyst_keywords):
+            hits.append(title_lc)
+            src = (getattr(n, "source", None) or "").strip()
+            short_title = raw_title if len(raw_title) <= 90 else raw_title[:87].rstrip() + "..."
+            detail = f"{short_title}" + (f" — {src}" if src else "")
+            catalyst_details.append(detail)
     if hits:
         hidden_score += min(0.12, 0.04 * len(hits))
         rationale_lines.append("Recent potential catalyst(s) in headlines")
@@ -314,6 +321,7 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     ai_analysis = (
         (f"About the company: {about_txt}. " if about_txt else "")
         + f"Why it's moving: {why_moving}. "
+        + (f"Specific catalysts: { '; '.join(catalyst_details[:3])}. " if catalyst_details else "")
         + f"Why it can continue: {why_continue}. "
         + f"Bull case themes: {bull_summary or 'no clear bullish story from headlines'}. "
         + f"Bear case/risks: {bear_summary or 'no clear bearish story from headlines'}. "
@@ -321,7 +329,11 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         + f"What would invalidate: {invalid_txt}. "
         + f"Sources scanned: {src_list or 'multiple aggregators'}. "
         + f"Bottom line: {label} with {round(confidence,2)}% confidence."
-        + (f" Predicted price (near-term): ${predicted:.2f}." if predicted else "")
+        + (
+            f" Predicted price (near-term): ${predicted:.2f} (current: ${price_now:.2f})."
+            if (predicted is not None and price_now is not None)
+            else (f" Predicted price (near-term): ${predicted:.2f}." if predicted is not None else "")
+          )
     )
 
     return Recommendation(
