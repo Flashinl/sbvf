@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 try:
     # Only for type hints; avoid hard dependency at import time
@@ -18,6 +18,7 @@ class Recommendation:
     label: str
     confidence: float  # 0..100
     rationale: str
+    ai_analysis: str
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -29,18 +30,33 @@ def _avg(xs: List[float]) -> float:
     return sum(xs) / len(xs) if xs else 0.0
 
 
-def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"], *, risk: str = "medium") -> Recommendation:
-    """Combine fundamentals, technicals, and news into a simple Buy/Hold/Sell.
+def _qualitative_trend(score: float) -> str:
+    if score >= 0.6:
+        return "strong uptrend"
+    if score >= 0.25:
+        return "uptrend"
+    if score <= -0.6:
+        return "strong downtrend"
+    if score <= -0.25:
+        return "downtrend"
+    return "sideways"
 
-    Returns:
-        Recommendation(label, confidence, rationale)
+
+def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"], *, risk: str = "medium") -> Recommendation:
+    """Momentum-first recommendation that works even when fundamentals are missing.
+
+    We purposely ignore fundamentals to support more tickers (ETFs, ADRs, IPOs).
     """
     rationale_lines: List[str] = []
 
     # Technicals (primary)
-    trend = getattr(tech, "trend_score", 0.0) or 0.0  # expected -1..1
+    trend = float(getattr(tech, "trend_score", 0.0) or 0.0)  # expected -1..1
     rsi = getattr(tech, "rsi14", None)
-    tech_score = _clamp(float(trend), -1.0, 1.0)
+    sma20 = getattr(tech, "sma20", None)
+    sma50 = getattr(tech, "sma50", None)
+    sma200 = getattr(tech, "sma200", None)
+
+    tech_score = _clamp(trend, -1.0, 1.0)
     if rsi is not None:
         if rsi < 30:
             tech_score += 0.2; rationale_lines.append("RSI oversold (<30)")
@@ -53,21 +69,14 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         else:
             rationale_lines.append("RSI neutral")
 
-    # Fundamentals (lightweight)
-    pe = getattr(price, "trailing_pe", None)
-    dy = getattr(price, "dividend_yield", None)
-    fund_score = 0.0
-    if pe is not None:
-        if pe < 12:
-            fund_score += 0.15; rationale_lines.append("Attractive PE")
-        elif pe < 35:
-            fund_score += 0.05; rationale_lines.append("Reasonable PE")
-        elif pe > 40:
-            fund_score -= 0.1; rationale_lines.append("Rich PE")
-    if dy and dy > 0.02:
-        fund_score += 0.05; rationale_lines.append("Income support (dividend)")
+    # SMA alignment bonus/penalty
+    if all(v is not None for v in [sma20, sma50, sma200]):
+        if sma20 > sma50 > sma200:
+            tech_score += 0.15; rationale_lines.append("Bullish SMA stack (20>50>200)")
+        elif sma20 < sma50 < sma200:
+            tech_score -= 0.15; rationale_lines.append("Bearish SMA stack (20<50<200)")
 
-    # News sentiment
+    # News sentiment (secondary)
     sentiments = []
     for n in news or []:
         s = getattr(n, "sentiment", 0.0)
@@ -77,17 +86,10 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     if sentiments:
         rationale_lines.append(f"News sentiment {news_score:+.2f}")
 
-    # Earnings proximity risk adjustment
-    ed: Optional[datetime] = getattr(price, "earnings_date", None)
-    if ed:
-        days = (ed - datetime.utcnow()).days
-        if -1 <= days <= 3:  # within ~3 days ahead or very recent
-            fund_score -= 0.05
-            tech_score -= 0.05
-            rationale_lines.append("Earnings proximity risk")
+    # Ignore fundamentals entirely to broaden coverage
 
-    # Combine with weights
-    total = 0.5 * tech_score + 0.25 * fund_score + 0.25 * news_score
+    # Combine with weights (momentum-first)
+    total = 0.7 * tech_score + 0.3 * news_score
 
     # Risk appetite scaling
     risk = (risk or "medium").lower()
@@ -106,9 +108,37 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     # Confidence as 50% base plus magnitude
     confidence = _clamp(50.0 + 45.0 * abs(total), 1.0, 99.0)
 
-    # Build rationale
+    # Build rationale bullets
     if not rationale_lines:
         rationale_lines.append("Mixed signals")
     rationale = "\n".join(f"• {line}" for line in rationale_lines)
 
-    return Recommendation(label=label, confidence=round(confidence, 2), rationale=rationale)
+    # AI-style narrative analysis
+    t_qual = _qualitative_trend(trend)
+    rsi_txt = "unknown RSI"
+    if rsi is not None:
+        if rsi < 30: rsi_txt = f"oversold RSI ({rsi:.0f})"
+        elif rsi > 70: rsi_txt = f"overbought RSI ({rsi:.0f})"
+        else: rsi_txt = f"neutral RSI ({rsi:.0f})"
+    sma_txt = ""
+    if all(v is not None for v in [sma20, sma50, sma200]):
+        if sma20 > sma50 > sma200:
+            sma_txt = " with a constructive 20>50>200-day moving-average stack"
+        elif sma20 < sma50 < sma200:
+            sma_txt = " with a deteriorating 20<50<200-day moving-average stack"
+    ns_txt = " and headlines are balanced"
+    if sentiments:
+        if news_score > 0.05: ns_txt = " and headlines skew positive"
+        elif news_score < -0.05: ns_txt = " and headlines skew negative"
+
+    ai_analysis = (
+        f"Momentum currently suggests {t_qual}{sma_txt}. The setup is supported by {rsi_txt}{ns_txt}. "
+        f"Given a {risk}-risk profile, this points to a {label.lower()} with {confidence:.0f}% confidence."
+    )
+
+    return Recommendation(
+        label=label,
+        confidence=round(confidence, 2),
+        rationale=rationale,
+        ai_analysis=ai_analysis,
+    )

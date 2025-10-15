@@ -6,22 +6,22 @@
   <title>StockBotVF</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-50 text-gray-900">
+<body class="bg-black text-green-100">
   <div class="max-w-5xl mx-auto px-4 py-8">
-    <header class="mb-8 flex items-center justify-between">
+    <header class="mb-8 flex items-center justify-between text-green-300">
       <h1 class="text-2xl font-semibold">StockBotVF</h1>
       <a href="/health" class="text-sm text-gray-500 hover:text-gray-700">Health</a>
     </header>
 
-    <section class="bg-white shadow-sm rounded-xl border border-gray-200 p-4 md:p-6">
+    <section class="bg-neutral-900 shadow-sm rounded-xl border border-green-800 p-4 md:p-6">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Ticker</label>
-          <input id="ticker" placeholder="AAPL" class="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          <input id="ticker" placeholder="AAPL" class="w-full rounded-lg border-green-700 bg-black text-green-100 focus:ring-2 focus:ring-green-500 focus:border-green-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Risk</label>
-          <select id="risk" class="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+          <select id="risk" class="w-full rounded-lg border-green-700 bg-black text-green-100 focus:ring-2 focus:ring-green-500 focus:border-green-500">
             <option value="low">Low</option>
             <option value="medium" selected>Medium</option>
             <option value="high">High</option>
@@ -29,32 +29,32 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Max News</label>
-          <input id="max_news" type="number" min="0" max="25" value="8" class="w-full rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          <input id="max_news" type="number" min="0" max="25" value="8" class="w-full rounded-lg border-green-700 bg-black text-green-100 focus:ring-2 focus:ring-green-500 focus:border-green-500" />
         </div>
         <div class="flex items-end">
-          <button id="analyzeBtn" class="w-full inline-flex items-center justify-center rounded-lg bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <button id="analyzeBtn" class="w-full inline-flex items-center justify-center rounded-lg bg-green-600 text-black px-4 py-2 font-semibold hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-green-500">
             Analyze
           </button>
         </div>
       </div>
-      <p id="hint" class="text-xs text-gray-500 mt-2">Tip: Only NEWSAPI_KEY is required for headlines. Prices use Yahoo Finance.</p>
+      <p id="hint" class="text-xs text-green-500 mt-2">Tip: Only NEWSAPI_KEY is required for headlines. Prices use Yahoo Finance.</p>
     </section>
 
     <section id="results" class="mt-6 hidden">
-      <div id="rec" class="mb-6 p-4 rounded-xl border border-gray-200 bg-white"></div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div id="fundamentals" class="p-4 rounded-xl border border-gray-200 bg-white"></div>
-        <div id="technicals" class="p-4 rounded-xl border border-gray-200 bg-white"></div>
-        <div id="news" class="p-4 rounded-xl border border-gray-200 bg-white md:col-span-1"></div>
+      <div id="rec" class="mb-6 p-4 rounded-xl border border-green-800 bg-neutral-900"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <div id="technicals" class="p-4 rounded-xl border border-green-800 bg-neutral-900"></div>
+        <div id="news" class="p-4 rounded-xl border border-green-800 bg-neutral-900 md:col-span-1"></div>
       </div>
     </section>
 
     <section id="loading" class="mt-6 hidden">
-      <div class="animate-pulse p-4 rounded-xl border border-gray-200 bg-white text-gray-500">Running analysis…</div>
+      <div class="animate-pulse p-4 rounded-xl border border-green-800 bg-neutral-900 text-green-500">Running analysis…</div>
     </section>
 
     <section id="error" class="mt-6 hidden">
-      <div class="p-4 rounded-xl border border-red-200 bg-red-50 text-red-700"></div>
+      <div class="p-4 rounded-xl border border-red-700 bg-red-950 text-red-300"></div>
     </section>
   </div>
 
@@ -63,11 +63,11 @@
     const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 
     function card(title, rowsHtml) {
-      return `<h2 class=\"text-lg font-semibold mb-3\">${title}</h2><div class=\"space-y-1 text-sm\">${rowsHtml}</div>`;
+      return `<h2 class=\"text-lg font-semibold mb-3 text-green-400\">${title}</h2><div class=\"space-y-1 text-sm\">${rowsHtml}</div>`;
     }
 
     function row(label, value) {
-      return `<div class=\"flex justify-between\"><span class=\"text-gray-600\">${label}</span><span class=\"font-medium\">${value ?? '-'}</span></div>`;
+      return `<div class=\"flex justify-between\"><span class=\"text-green-500\">${label}</span><span class=\"font-semibold text-green-200\">${value ?? '-'}</span></div>`;
     }
 
     async function run() {
@@ -90,16 +90,16 @@
         el('rec').innerHTML = `
           <div class=\"flex items-center justify-between\">
             <div>
-              <div class=\"text-sm text-gray-600\">${data.price?.ticker || ticker}</div>
-              <div class=\"text-2xl font-semibold\">${r.label || '—'} <span class=\"text-gray-500 text-base\">(${fmt.format(r.confidence || 0)}%)</span></div>
+              <div class=\"text-sm text-green-500\">${data.price?.ticker || ticker}</div>
+              <div class=\"text-2xl font-semibold text-green-400\">${r.label || '—'} <span class=\"text-green-500 text-base\">(${fmt.format(r.confidence || 0)}%)</span></div>
             </div>
-            <div class=\"text-2xl font-semibold\">$${fmt.format(data.price?.price)}</div>
+            <div class=\"text-2xl font-semibold text-green-300\">$${fmt.format(data.price?.price)}</div>
           </div>
-          <p class=\"text-sm text-gray-700 mt-2\">${(r.rationale || '').split('\n').map(x=>`<span class=\"block\">${x}</span>`).join('')}</p>`;
+          <p class=\"text-sm text-green-200 mt-2\">${(r.ai_analysis || r.rationale || '').split('\n').map(x=>`<span class=\"block\">${x}</span>`).join('')}</p>`;
 
-        // Fundamentals
+        // Fundamentals removed per request
         const p = data.price || {};
-        el('fundamentals').innerHTML = card('Fundamentals', [
+        /* fundamentals removed */
           row('Market Cap', p.market_cap ? `$${fmt.format(p.market_cap)}` : '-'),
           row('PE (TTM)', p.trailing_pe),
           row('EPS (TTM)', p.eps_ttm),
@@ -107,24 +107,27 @@
           row('52W High', p.fifty_two_week_high),
           row('52W Low', p.fifty_two_week_low),
           row('Earnings Date', p.earnings_date || '-')
-        ].join(''));
+        
 
         // Technicals
         const t = data.technicals || {};
-        el('technicals').innerHTML = card('Technicals', [
+        el('technicals').innerHTML = card('Technical Stats', [
+          row('Price', data.price?.price ? `$${fmt.format(data.price.price)}` : '-'),
           row('SMA20', t.sma20),
           row('SMA50', t.sma50),
           row('SMA200', t.sma200),
           row('RSI(14)', t.rsi14),
-          row('Trend Score', t.trend_score)
+          row('Trend Score', t.trend_score),
+          row('52W High', data.price?.fifty_two_week_high),
+          row('52W Low', data.price?.fifty_two_week_low)
         ].join(''));
 
         // News
         const list = (data.news || []).slice(0, 10).map(n => `
-          <a href=\"${n.url}\" target=\"_blank\" class=\"block p-3 rounded-lg border border-gray-200 hover:bg-gray-50\">
-            <div class=\"text-sm text-gray-500\">${n.source}</div>
+          <a href=\"${n.url}\" target=\"_blank\" class=\"block p-3 rounded-lg border border-green-800 hover:bg-neutral-800\">
+            <div class=\"text-sm text-green-500\">${n.source}</div>
             <div class=\"font-medium\">${n.title}</div>
-            <div class=\"text-sm text-gray-500\">Sentiment: ${fmt.format((n.sentiment || 0) * 100)}%</div>
+            <div class=\"text-sm text-green-500\">Sentiment: ${fmt.format((n.sentiment || 0) * 100)}%</div>
           </a>`).join('');
         el('news').innerHTML = `<h2 class=\"text-lg font-semibold mb-3\">Recent News</h2><div class=\"space-y-2\">${list || '<div class=\"text-sm text-gray-500\">No recent headlines</div>'}</div>`;
 

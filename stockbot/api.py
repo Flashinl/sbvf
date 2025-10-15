@@ -91,6 +91,7 @@ async def analyze(
         "label": rec.label,
         "confidence": rec.confidence,
         "rationale": rec.rationale,
+        "ai_analysis": getattr(rec, "ai_analysis", ""),
     }
     return payload
 
