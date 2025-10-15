@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 from .config import Settings
 from .providers.price_yf import fetch_price_and_fundamentals, fetch_technicals, PriceSnapshot, Technicals
 from .providers.news_newsapi import fetch_news_newsapi, NewsItem
+from .providers.news_finnhub import fetch_news_finnhub
+from .providers.news_polygon import fetch_news_polygon
 from .analysis import recommend
 
 
@@ -62,13 +64,64 @@ def main(argv: List[str] | None = None) -> int:
     # Fetch sequentially (simple CLI flow)
     price = fetch_price_and_fundamentals(ticker)
     tech = fetch_technicals(ticker)
-    news = fetch_news_newsapi(
-        ticker,
-        settings.newsapi_key,
-        max_items=max(0, int(args.max_news or 0)),
-        company_name=getattr(price, "long_name", None),
-        industry=getattr(price, "industry", None),
-    )
+
+    # Multi-source headlines: NewsAPI + optional Finnhub/Polygon
+    max_items = max(0, int(args.max_news or 0))
+    news_lists: list[list[NewsItem]] = []
+    try:
+        news_lists.append(
+            fetch_news_newsapi(
+                ticker,
+                settings.newsapi_key,
+                max_items=max_items,
+                company_name=getattr(price, "long_name", None),
+                industry=getattr(price, "industry", None),
+            )
+        )
+    except Exception:
+        news_lists.append([])
+    if getattr(settings, "finnhub_key", None):
+        try:
+            news_lists.append(
+                fetch_news_finnhub(
+                    ticker,
+                    settings.finnhub_key,
+                    max_items=max_items,
+                )
+            )
+        except Exception:
+            news_lists.append([])
+    if getattr(settings, "polygon_key", None):
+        try:
+            news_lists.append(
+                fetch_news_polygon(
+                    ticker,
+                    settings.polygon_key,
+                    max_items=max_items,
+                )
+            )
+        except Exception:
+            news_lists.append([])
+
+    # Merge and de-duplicate
+    combined: list[NewsItem] = []
+    seen: set[tuple[str, str]] = set()
+    def _key(n: NewsItem) -> tuple[str, str]:
+        u = (getattr(n, "url", None) or "").strip().lower()
+        if u:
+            return ("u", u)
+        t = (getattr(n, "title", None) or "").strip().lower()
+        return ("t", t)
+
+    for lst in news_lists:
+        for n in lst or []:
+            k = _key(n)
+            if not k or k in seen:
+                continue
+            seen.add(k)
+            combined.append(n)
+
+    news = combined[: max_items]
 
     rec = recommend(price, tech, news, risk=args.risk)
     payload = _ds_to_dict(price, tech, news)
