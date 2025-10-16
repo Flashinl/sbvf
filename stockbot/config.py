@@ -23,6 +23,12 @@ class Settings(BaseModel):
     llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() in ("1", "true", "yes")
     llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 
+    # Embeddings + SEC
+    embeddings_enabled: bool = os.getenv("EMBEDDINGS_ENABLED", "false").lower() in ("1", "true", "yes")
+    embeddings_model: str = os.getenv("EMBEDDINGS_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    sec_enabled: bool = os.getenv("SEC_ENABLED", "true").lower() in ("1", "true", "yes")
+    sec_user_agent: str = os.getenv("SEC_USER_AGENT", "StockBotVF/1.0 (contact@example.com)")
+
     # Timeouts/concurrency
     request_timeout_seconds: int = 240  # default overall time budget
     per_request_timeout_seconds: int = 20

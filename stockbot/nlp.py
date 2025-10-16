@@ -8,6 +8,8 @@ import spacy
 import pytextrank
 
 from .providers.news_newsapi import NewsItem
+from .config import Settings
+from .semantics import embed_texts, cluster_texts, summarize_themes
 
 _nlp = None
 
@@ -48,9 +50,11 @@ def _event_signals(text: str) -> Dict[str, bool]:
 
 
 def analyze_articles(news: List[NewsItem], max_articles: int = 6) -> Dict[str, Any]:
-    # Choose up to max_articles from distinct domains to avoid source bias
+    # Prefer non-aggregator domains first for diversity
+    aggregator_domains = {"biztoc.com", "finance.yahoo.com", "markets.businessinsider.com", "investing.com"}
     selected_urls: List[str] = []
     seen_domains = set()
+    # First pass: non-aggregators
     for n in (news or []):
         u = getattr(n, "url", None)
         if not u:
@@ -59,20 +63,28 @@ def analyze_articles(news: List[NewsItem], max_articles: int = 6) -> Dict[str, A
             d = urlparse(u).netloc.lower()
         except Exception:
             d = None
-        if not d or d in seen_domains:
+        if not d or d in seen_domains or any(ad in d for ad in aggregator_domains):
             continue
         seen_domains.add(d)
         selected_urls.append(u)
         if len(selected_urls) >= max_articles:
             break
-    # fallback to first few if we didn't get enough distinct domains
+    # Second pass: fill with remaining (aggregators allowed)
     if len(selected_urls) < max_articles:
         for n in (news or []):
             u = getattr(n, "url", None)
-            if u and u not in selected_urls:
-                selected_urls.append(u)
-                if len(selected_urls) >= max_articles:
-                    break
+            if not u:
+                continue
+            try:
+                d = urlparse(u).netloc.lower()
+            except Exception:
+                d = None
+            if not d or d in seen_domains:
+                continue
+            seen_domains.add(d)
+            selected_urls.append(u)
+            if len(selected_urls) >= max_articles:
+                break
 
     texts = []
     for u in selected_urls:
@@ -149,10 +161,26 @@ def analyze_articles(news: List[NewsItem], max_articles: int = 6) -> Dict[str, A
     drivers = list(dict.fromkeys(drivers))[:3]
     facts = list(dict.fromkeys(facts))[:8]
 
+    # Optional semantic themes via embeddings
+    themes: List[str] = []
+    try:
+        st = Settings.load()
+        if getattr(st, "embeddings_enabled", False) and getattr(st, "hf_api_token", None):
+            candidates = drivers + facts
+            if len(candidates) >= 3:
+                embs = embed_texts(candidates, st)
+                if embs:
+                    k = 3 if len(candidates) >= 6 else 2
+                    clusters = cluster_texts(candidates, embs, k)
+                    themes = summarize_themes(candidates, clusters, embs, max_themes=3)
+    except Exception:
+        themes = []
+
     return {
         "drivers": drivers,
         "watch": list(dict.fromkeys(watch))[:4],
         "timing": list(dict.fromkeys(timing))[:3],
         "facts": facts,
+        "themes": themes,
     }
 

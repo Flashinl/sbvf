@@ -60,6 +60,7 @@ def generate_narrative(
     sources: str,
     label: str,
     facts: list[str] | None = None,
+    themes: list[str] | None = None,
     settings: Settings,
 ) -> Optional[str]:
     """
@@ -105,6 +106,11 @@ def generate_narrative(
         fxs = list(dict.fromkeys(fxs))[:8]
         if fxs:
             ctx.append("Facts: " + "; ".join(fxs))
+    if themes:
+        ths = [re.sub(r"\s+", " ", t).strip() for t in themes if t]
+        ths = list(dict.fromkeys(ths))[:3]
+        if ths:
+            ctx.append("Themes: " + "; ".join(ths))
 
     instruction = (
         "Write a concise, human, qualitative analysis for a stock. Do not include any prices, percentages, confidence numbers, or numeric targets in the narrative. "

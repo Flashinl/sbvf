@@ -161,6 +161,8 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
                 nlp_drivers = list(nout.get("drivers") or [])
                 nlp_watch = list(nout.get("watch") or [])
                 nlp_timing = list(nout.get("timing") or [])
+                nlp_facts = list(nout.get("facts") or [])
+                nlp_themes = list(nout.get("themes") or [])
     except Exception:
         pass
 
@@ -418,6 +420,22 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         st2 = st if 'st' in locals() else Settings.load()
         if getattr(st2, 'llm_enabled', False) and getattr(st2, 'hf_api_token', None):
             from .llm import generate_narrative
+            facts_all = []
+            if isinstance(nout, dict):
+                facts_all.extend(list(nout.get('facts') or []))
+                facts_all.extend(list(nout.get('themes') or []))
+            # Also enrich with SEC facts if enabled
+            try:
+                if getattr(st2, 'sec_enabled', True):
+                    from .sec import fetch_sec_facts
+                    sec_f = fetch_sec_facts(getattr(price, 'ticker', ''), st2)
+                    if sec_f:
+                        facts_all.extend(sec_f)
+            except Exception:
+                pass
+            # Dedup facts
+            if facts_all:
+                seen=set(); facts_all=[x for x in facts_all if not (x.lower() in seen or seen.add(x.lower()))]
             llm_out = generate_narrative(
                 about=about_txt,
                 why_moving=why_moving,
@@ -431,7 +449,8 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
                 invalid_txt=invalid_txt,
                 sources=(src_list or ''),
                 label=label,
-                facts=(nout.get('facts') if isinstance(nout, dict) else None),
+                facts=facts_all,
+                themes=(nout.get('themes') if isinstance(nout, dict) else None),
                 settings=st2,
             )
             if llm_out:
