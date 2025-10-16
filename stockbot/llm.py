@@ -113,13 +113,30 @@ def generate_narrative(
             ctx.append("Themes: " + "; ".join(ths))
 
     instruction = (
-        "Write a concise, human, qualitative analysis for a stock. Do not include any prices, percentages, confidence numbers, or numeric targets in the narrative. "
-        "Use plain, grounded language. Synthesize across multiple sources; do not quote headlines or name publishers. Keep sections in this order and tone: "
-        "About the company; Why it's moving; Specific drivers; Timing; Why it can continue; What the stock needs; Positives; Risks; To go higher; What could go wrong; Bottom line. "
-        "For Bottom line, output only the label (Buy/Hold/Sell) with no confidence number."
+        "Write a natural, expert, qualitative analysis for a stock. Do not include any prices, percentages, confidence numbers, or numeric targets. "
+        "Synthesize across the provided Facts/Themes and context. Do not name publishers or quote headlines. Avoid bullet points or numbered lists. "
+        "Write 3–5 short paragraphs with varied sentence length. Keep it specific and grounded in the context, not generic."
     )
 
-    prompt = instruction + "\n\n" + "\n".join(ctx)
+    examples = (
+        "Example style 1:\n"
+        "The company is leaning into a clear demand signal: recent deals and product updates point to a focus on execution rather than optics. "
+        "Multiple sources highlight fresh customer momentum and a pipeline that appears to be broadening beyond one-off wins. "
+        "Management’s messaging centers on delivery timelines and partner enablement, which aligns with near‑term catalysts.\n\n"
+        "Example style 2:\n"
+        "Why it’s moving ties back to concrete actions rather than chatter. Coverage points to new agreements and platform capacity coming online, "
+        "and commentary suggests the next leg depends on sustained uptake and proof points from large accounts. "
+        "Risks are manageable if integration stays on track and guidance remains conservative."
+    )
+
+    prompt = (
+        instruction
+        + "\n\n"
+        + examples
+        + "\n\nContext:\n"
+        + "\n".join(ctx)
+        + f"\n\nWrite the analysis now. End with: Bottom line: {label}"
+    )
 
     # Trim prompt to a safe size
     max_chars = int(getattr(settings, "llm_max_input_chars", 4000) or 4000)
@@ -133,7 +150,7 @@ def generate_narrative(
 
     # Try provided model first, then a few smart defaults
     # Ensure Qwen is primary regardless of provided model
-    candidates = ["Qwen/Qwen2.5-1.5B-Instruct"]
+    candidates = ["Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-3B-Instruct"]
     if model and model not in candidates:
         candidates.append(model)
     for fallback in ("google/flan-t5-large", "google/flan-t5-base"):
@@ -144,7 +161,7 @@ def generate_narrative(
     for mdl in candidates:
         url = f"{HF_API_BASE}/{mdl}"
         # Try text2text
-        payload_t2t = {"inputs": prompt, "parameters": {"max_new_tokens": 260, "temperature": 0.4, "repetition_penalty": 1.08, "top_p": 0.9}}
+        payload_t2t = {"inputs": prompt, "parameters": {"max_new_tokens": 320, "temperature": 0.4, "repetition_penalty": 1.08, "top_p": 0.9}}
         res = _post_json(url, payload_t2t, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
         if isinstance(res, list) and res and isinstance(res[0], dict) and "generated_text" in res[0]:
             text = res[0]["generated_text"]
@@ -155,7 +172,7 @@ def generate_narrative(
 
         if not text:
             # Try text-generation
-            payload_tg = {"inputs": prompt, "parameters": {"max_new_tokens": 260, "do_sample": False, "temperature": 0.3, "repetition_penalty": 1.08, "top_p": 0.9}}
+            payload_tg = {"inputs": prompt, "parameters": {"max_new_tokens": 320, "do_sample": False, "temperature": 0.3, "repetition_penalty": 1.08, "top_p": 0.9}}
             res2 = _post_json(url, payload_tg, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
             if isinstance(res2, list) and res2 and isinstance(res2[0], dict) and "generated_text" in res2[0]:
                 text = res2[0]["generated_text"]
