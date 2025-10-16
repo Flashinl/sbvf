@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import time
+import re
 from typing import Optional
 from urllib import request, error
 
@@ -36,8 +37,10 @@ def _post_json(url: str, payload: dict, headers: dict, timeout: int) -> Optional
 
 def _clean(text: str) -> str:
     t = (text or "").strip()
-    # Keep it concise and avoid numeric clutter from models that echo numbers
-    # Remove trailing repeated whitespace and collapse spaces
+    # Remove price figures and percentages to keep narrative qualitative
+    t = re.sub(r"\$[0-9][\d\.,]*", "", t)
+    t = re.sub(r"\b\d+(?:\.\d+)?\s*%", "", t)
+    # Collapse leftover multiple spaces
     t = " ".join(t.split())
     return t
 
@@ -97,8 +100,9 @@ def generate_narrative(
         ctx.append(f"Sources: {sources}")
 
     instruction = (
-        "Write a concise, human, qualitative analysis for a stock. Avoid numeric precision, percentages, and price figures in the narrative (prices are shown elsewhere). "
-        "Use plain language. Capture business context and multi-source drivers. Keep sections in this order and tone: About the company; Why it's moving; Specific drivers; Timing; Why it can continue; What the stock needs; Positives; Risks; To go higher; What could go wrong; Bottom line. "
+        "Write a concise, human, qualitative analysis for a stock. Do not include any prices, percentages, confidence numbers, or numeric targets in the narrative. "
+        "Use plain, grounded language. Synthesize across multiple sources; do not quote headlines or name publishers. Keep sections in this order and tone: "
+        "About the company; Why it's moving; Specific drivers; Timing; Why it can continue; What the stock needs; Positives; Risks; To go higher; What could go wrong; Bottom line. "
         "For Bottom line, output only the label (Buy/Hold/Sell) with no confidence number."
     )
 
@@ -109,31 +113,43 @@ def generate_narrative(
     if len(prompt) > max_chars:
         prompt = prompt[-max_chars:]
 
-    url = f"{HF_API_BASE}/{model}"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
-    # Try text2text and text-generation formats gracefully.
-    payload_t2t = {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}}
-    res = _post_json(url, payload_t2t, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
-    text = None
-    if isinstance(res, list) and res and isinstance(res[0], dict) and "generated_text" in res[0]:
-        text = res[0]["generated_text"]
-    elif isinstance(res, dict) and "generated_text" in res:
-        text = res["generated_text"]
-    elif isinstance(res, list) and res and isinstance(res[0], dict) and "summary_text" in res[0]:
-        text = res[0]["summary_text"]
+    # Try provided model first, then a few smart defaults
+    candidates = []
+    if model:
+        candidates.append(model)
+    for fallback in ("Qwen/Qwen2.5-1.5B-Instruct", "google/flan-t5-large", "google/flan-t5-base"):
+        if fallback not in candidates:
+            candidates.append(fallback)
 
-    if not text:
-        # Fallback to text-generation
-        payload_tg = {"inputs": prompt, "parameters": {"max_new_tokens": 220, "do_sample": False, "temperature": 0.4}}
-        res2 = _post_json(url, payload_tg, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
-        if isinstance(res2, list) and res2 and isinstance(res2[0], dict) and "generated_text" in res2[0]:
-            text = res2[0]["generated_text"]
-        elif isinstance(res2, dict) and "generated_text" in res2:
-            text = res2["generated_text"]
+    text = None
+    for mdl in candidates:
+        url = f"{HF_API_BASE}/{mdl}"
+        # Try text2text
+        payload_t2t = {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}}
+        res = _post_json(url, payload_t2t, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
+        if isinstance(res, list) and res and isinstance(res[0], dict) and "generated_text" in res[0]:
+            text = res[0]["generated_text"]
+        elif isinstance(res, dict) and "generated_text" in res:
+            text = res["generated_text"]
+        elif isinstance(res, list) and res and isinstance(res[0], dict) and "summary_text" in res[0]:
+            text = res[0]["summary_text"]
+
+        if not text:
+            # Try text-generation
+            payload_tg = {"inputs": prompt, "parameters": {"max_new_tokens": 220, "do_sample": False, "temperature": 0.4}}
+            res2 = _post_json(url, payload_tg, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
+            if isinstance(res2, list) and res2 and isinstance(res2[0], dict) and "generated_text" in res2[0]:
+                text = res2[0]["generated_text"]
+            elif isinstance(res2, dict) and "generated_text" in res2:
+                text = res2["generated_text"]
+
+        if text:
+            break
 
     return _clean(text) if text else None
 

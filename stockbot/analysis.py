@@ -141,9 +141,9 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         title_lc = raw_title.lower()
         if any(k in title_lc for k in catalyst_keywords):
             hits.append(title_lc)
-            src = (getattr(n, "source", None) or "").strip()
+            # De-emphasize publisher/source to avoid aggregator bias surfacing in text
             short_title = raw_title if len(raw_title) <= 90 else raw_title[:87].rstrip() + "..."
-            detail = f"{short_title}" + (f" — {src}" if src else "")
+            detail = f"{short_title}"
             catalyst_details.append(detail)
     if hits:
         hidden_score += min(0.12, 0.04 * len(hits))

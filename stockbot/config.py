@@ -21,13 +21,13 @@ class Settings(BaseModel):
     # Feature flags
     deep_nlp_enabled: bool = os.getenv("DEEP_NLP_ENABLED", "true").lower() in ("1", "true", "yes")
     llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() in ("1", "true", "yes")
-    llm_model: str = os.getenv("LLM_MODEL", "google/flan-t5-base")
+    llm_model: str = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 
     # Timeouts/concurrency
     request_timeout_seconds: int = 240  # default overall time budget
     per_request_timeout_seconds: int = 20
     max_concurrency: int = 8
-    llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "18"))
+    llm_timeout_seconds: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "25"))
     llm_max_input_chars: int = int(os.getenv("LLM_MAX_INPUT_CHARS", "4000"))
 
     @classmethod
