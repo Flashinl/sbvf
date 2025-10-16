@@ -397,6 +397,7 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     elif catalyst_details:
         drivers_line = "; ".join(catalyst_details[:3])
 
+    # Compose default narrative (fallback if LLM not available)
     ai_analysis = (
         (f"About the company: {about_txt}. " if about_txt else "")
         + f"Why it's moving: {why_moving}. "
@@ -411,6 +412,31 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         + f"Sources: {src_list or 'multiple aggregators'}. "
         + f"Bottom line: {label}."
     )
+
+    # Optional: free LLM (Hugging Face Inference API) to produce a smarter narrative
+    try:
+        st2 = st if 'st' in locals() else Settings.load()
+        if getattr(st2, 'llm_enabled', False) and getattr(st2, 'hf_api_token', None):
+            from .llm import generate_narrative
+            llm_out = generate_narrative(
+                about=about_txt,
+                why_moving=why_moving,
+                drivers_line=(drivers_line or ''),
+                timing_msgs=timing_msgs,
+                why_continue=why_continue,
+                watch_list=watch,
+                bull_summary=(bull_summary or ''),
+                bear_summary=(bear_summary or ''),
+                cond_up_txt=cond_up_txt,
+                invalid_txt=invalid_txt,
+                sources=(src_list or ''),
+                label=label,
+                settings=st2,
+            )
+            if llm_out:
+                ai_analysis = llm_out
+    except Exception:
+        pass
 
     return Recommendation(
         label=label,
