@@ -188,6 +188,15 @@ async def analyze(
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+    # If ticker looks invalid or no data was found, return a friendly error
+    try:
+        no_price = (getattr(p, "price", None) is None)
+        no_tech = (t is None) or all(getattr(t, fld, None) is None for fld in ("sma20","sma50","sma200","rsi14","trend_score"))
+        if no_price and no_tech:
+            return JSONResponse(status_code=404, content={"error": "Ticker not found or no data available. Try a valid symbol like AAPL or NVDA."})
+    except Exception:
+        pass
+
     try:
         rec = recommend(p, t, news, risk=risk)
         payload = _ds_to_dict(p, t, news)
@@ -201,5 +210,5 @@ async def analyze(
         return payload
     except Exception as e:
         # Ensure we always return JSON even if recommendation/serialization fails
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(status_code=500, content={"error": "Analysis failed. Please try another ticker or try again shortly."})
 

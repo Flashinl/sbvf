@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import List, Dict, Any
 import re
+from urllib.parse import urlparse
 
 import trafilatura
 import spacy
@@ -47,11 +48,34 @@ def _event_signals(text: str) -> Dict[str, bool]:
 
 
 def analyze_articles(news: List[NewsItem], max_articles: int = 3) -> Dict[str, Any]:
-    # Pull top few with URLs
-    urls = [n.url for n in (news or []) if getattr(n, "url", None)]
-    urls = urls[:max_articles]
+    # Choose up to max_articles from distinct domains to avoid source bias
+    selected_urls: List[str] = []
+    seen_domains = set()
+    for n in (news or []):
+        u = getattr(n, "url", None)
+        if not u:
+            continue
+        try:
+            d = urlparse(u).netloc.lower()
+        except Exception:
+            d = None
+        if not d or d in seen_domains:
+            continue
+        seen_domains.add(d)
+        selected_urls.append(u)
+        if len(selected_urls) >= max_articles:
+            break
+    # fallback to first few if we didn't get enough distinct domains
+    if len(selected_urls) < max_articles:
+        for n in (news or []):
+            u = getattr(n, "url", None)
+            if u and u not in selected_urls:
+                selected_urls.append(u)
+                if len(selected_urls) >= max_articles:
+                    break
+
     texts = []
-    for u in urls:
+    for u in selected_urls:
         tx = _fetch_text(u)
         if tx:
             texts.append((u, tx))
@@ -71,13 +95,17 @@ def analyze_articles(news: List[NewsItem], max_articles: int = 3) -> Dict[str, A
         for k, v in sig.items():
             if v:
                 found[k] = True
-        # Extract top-ranked sentences for drivers
+        # Extract top-ranked sentences for drivers, skipping number-heavy lines
         try:
             if hasattr(doc._, "textrank_paragraphs"):
                 for p in doc._.textrank.paragraphs[:2]:
                     sent = re.sub(r"\s+", " ", p.text.strip())
-                    if len(sent) > 40:
-                        drivers.append(sent)
+                    if len(sent) <= 40:
+                        continue
+                    digit_ratio = sum(ch.isdigit() for ch in sent) / max(1, len(sent))
+                    if digit_ratio > 0.3 or sent.count('%') >= 2:
+                        continue
+                    drivers.append(sent)
         except Exception:
             pass
 

@@ -72,32 +72,37 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     tech_score = _clamp(trend, -1.0, 1.0)
     if rsi is not None:
         if rsi < 30:
-            tech_score += 0.2; rationale_lines.append("RSI oversold (<30)")
+            tech_score += 0.2; rationale_lines.append("RSI oversold")
         elif rsi < 45:
-            tech_score += 0.05; rationale_lines.append("RSI supportive (30-45)")
+            tech_score += 0.05; rationale_lines.append("RSI supportive")
         elif rsi > 70:
-            tech_score -= 0.2; rationale_lines.append("RSI overbought (>70)")
+            tech_score -= 0.2; rationale_lines.append("RSI overbought")
         elif rsi > 60:
-            tech_score -= 0.05; rationale_lines.append("RSI stretched (60-70)")
+            tech_score -= 0.05; rationale_lines.append("RSI stretched")
         else:
             rationale_lines.append("RSI neutral")
 
     # SMA alignment bonus/penalty
     if all(v is not None for v in [sma20, sma50, sma200]):
         if sma20 > sma50 > sma200:
-            tech_score += 0.15; rationale_lines.append("Bullish SMA stack (20>50>200)")
+            tech_score += 0.15; rationale_lines.append("Bullish moving averages stack")
         elif sma20 < sma50 < sma200:
-            tech_score -= 0.15; rationale_lines.append("Bearish SMA stack (20<50<200)")
+            tech_score -= 0.15; rationale_lines.append("Bearish moving averages stack")
 
-    # News sentiment (secondary)
+    # News tone (secondary) – avoid numbers in rationale
     sentiments = []
     for n in news or []:
         s = getattr(n, "sentiment", 0.0)
         if s is not None:
             sentiments.append(float(s))
-    news_score = _clamp(_avg(sentiments), -1.0, 1.0) * 0.5  # dampen a bit
+    news_score = _clamp(_avg(sentiments), -1.0, 1.0) * 0.5  # dampened weight
     if sentiments:
-        rationale_lines.append(f"News sentiment {news_score:+.2f}")
+        if news_score > 0.05:
+            rationale_lines.append("News tone supportive")
+        elif news_score < -0.05:
+            rationale_lines.append("News tone cautious")
+        else:
+            rationale_lines.append("News tone mixed")
 
     # Hidden gem overlay
     hidden_score = 0.0
@@ -113,12 +118,10 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
             hidden_score -= 0.02
 
     # Drawdown from 52W high as proxy for asymmetric setup
-    dd_txt = None
     if price_now is not None and high_52w:
         dd = 1.0 - float(price_now) / float(high_52w)
         if dd > 0:
-            dd_txt = f"{dd*100:.0f}% below 52W high"
-            rationale_lines.append(dd_txt)
+            rationale_lines.append("Below prior highs")
             if 0.7 <= dd <= 0.9:
                 hidden_score += 0.10  # attractive asymmetry window
             elif dd > 0.9:
@@ -406,12 +409,7 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         + f"To go higher: {cond_up_txt}. "
         + f"What could go wrong: {invalid_txt}. "
         + f"Sources: {src_list or 'multiple aggregators'}. "
-        + f"Bottom line: {label} with {round(confidence,2)}% confidence."
-        + (
-            f" Predicted price (near-term): ${predicted:.2f} (current: ${price_now:.2f})."
-            if (predicted is not None and price_now is not None)
-            else (f" Predicted price (near-term): ${predicted:.2f}." if predicted is not None else "")
-          )
+        + f"Bottom line: {label}."
     )
 
     return Recommendation(
