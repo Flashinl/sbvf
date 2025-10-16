@@ -1,10 +1,10 @@
 from __future__ import annotations
 import asyncio
 from fastapi import FastAPI, Query, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .config import Settings
 from .utils.asyncio_tools import run_with_timeout
@@ -13,7 +13,7 @@ from .providers.news_newsapi import fetch_news_newsapi, NewsItem
 from .providers.news_finnhub import fetch_news_finnhub
 from .providers.news_polygon import fetch_news_polygon
 from .analysis import recommend
-from .auth import router as auth_router, require_user
+from .auth import router as auth_router, require_user, get_current_user
 
 app = FastAPI(title="StockBotVF API", version="0.1.0")
 # Session middleware for cookie-based auth
@@ -26,7 +26,9 @@ templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/")
-async def home(request: Request, user=Depends(require_user)):
+async def home(request: Request, user=Depends(get_current_user)):
+    if not user:
+        return RedirectResponse(url=f"/auth/login?next={request.url.path}", status_code=303)
     return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
 

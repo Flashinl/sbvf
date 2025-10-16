@@ -50,6 +50,17 @@ def rate_limit(request: Request):
     _RATE_LIMIT[ip].append(now)
 
 
+def _safe_next(next_url: Optional[str]) -> str:
+    if not next_url:
+        return "/"
+    # disallow external and protocol-relative urls
+    if next_url.startswith("//") or "://" in next_url:
+        return "/"
+    if not next_url.startswith("/"):
+        return "/"
+    return next_url
+
+
 # Dependencies for session/JWT
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
@@ -73,14 +84,14 @@ def require_user(user: Optional[User] = Depends(get_current_user)) -> User:
 
 
 @router.get("/login")
-async def login_get(request: Request):
+async def login_get(request: Request, next: Optional[str] = None):
     csrf = generate_csrf_token()
     request.session["csrf"] = csrf
-    return templates.TemplateResponse("login.html", {"request": request, "csrf": csrf})
+    return templates.TemplateResponse("login.html", {"request": request, "csrf": csrf, "next": next or request.query_params.get("next")})
 
 
 @router.post("/login")
-async def login_post(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+async def login_post(request: Request, email: str = Form(...), password: str = Form(...), next: Optional[str] = Form(None), db: Session = Depends(get_db)):
     rate_limit(request)
     try:
         data = LoginForm(email=email, password=password)
@@ -88,8 +99,8 @@ async def login_post(request: Request, email: str = Form(...), password: str = F
         return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid input"}, status_code=400)
 
     # CSRF
-    form_csrf = request.form()._dict.get("csrf") if hasattr(request, "form") else None
-    if not constant_time_compare(request.session.get("csrf"), (await request.form()).get("csrf")):
+    form = await request.form()
+    if not constant_time_compare(request.session.get("csrf"), form.get("csrf")):
         return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid CSRF"}, status_code=400)
 
     user = db.query(User).filter(User.email == data.email).first()
@@ -99,18 +110,18 @@ async def login_post(request: Request, email: str = Form(...), password: str = F
         return templates.TemplateResponse("login.html", {"request": request, "error": "Account disabled"}, status_code=403)
 
     request.session["uid"] = user.id
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url=_safe_next(next or request.query_params.get("next")), status_code=303)
 
 
 @router.get("/register")
-async def register_get(request: Request):
+async def register_get(request: Request, next: Optional[str] = None):
     csrf = generate_csrf_token()
     request.session["csrf"] = csrf
-    return templates.TemplateResponse("register.html", {"request": request, "csrf": csrf})
+    return templates.TemplateResponse("register.html", {"request": request, "csrf": csrf, "next": next or request.query_params.get("next")})
 
 
 @router.post("/register")
-async def register_post(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+async def register_post(request: Request, email: str = Form(...), password: str = Form(...), next: Optional[str] = Form(None), db: Session = Depends(get_db)):
     rate_limit(request)
     try:
         data = RegisterForm(email=email, password=password)
@@ -135,7 +146,7 @@ async def register_post(request: Request, email: str = Form(...), password: str 
     print(f"[DEV] Email verification link: http://localhost:8000/auth/verify?token={token}")
 
     request.session["uid"] = user.id
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url=_safe_next(next or request.query_params.get("next")), status_code=303)
 
 
 @router.get("/verify")
