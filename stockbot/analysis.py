@@ -264,11 +264,11 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
         elif news_score < -0.05:
             reasons_moving.append("news tone cautious")
     if t_qual in ("uptrend", "strong uptrend"):
-        reasons_moving.append("accumulation — buyers in control")
+        reasons_moving.append("steady buying and a rising trend")
     elif t_qual in ("downtrend", "strong downtrend"):
-        reasons_moving.append("distribution — sellers pressing")
+        reasons_moving.append("steady selling and a falling trend")
     else:
-        reasons_moving.append("range/consolidation resolving")
+        reasons_moving.append("price is moving out of a recent range")
     # Earnings proximity
     try:
         if ed is not None:
@@ -276,7 +276,7 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
             dt_now = _dt.utcnow()
             delta_days = (ed - dt_now).days
             if -7 <= delta_days <= 14:
-                reasons_moving.append("flow around earnings timing")
+                reasons_moving.append("trading around recent/upcoming earnings")
     except Exception:
         pass
 
@@ -299,15 +299,15 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
 
     # Why it can continue
     if any(term in sec or term in ind for term in megatrend_terms):
-        reasons_continue.append("exposure to a structural megatrend")
+        reasons_continue.append("benefits from long-term demand in its industry (e.g., AI infrastructure)")
     if mc is not None and 2e8 <= mc <= 5e9:
-        reasons_continue.append("small/mid-cap runway if execution continues")
+        reasons_continue.append("room to grow if execution continues")
     if price_now and high_52w and (1 - float(price_now)/float(high_52w)) >= 0.2:
         reasons_continue.append("room to recover toward prior highs if momentum sustains")
     if hits:
-        reasons_continue.append("pipeline of potential follow-on catalysts")
+        reasons_continue.append("more announcements could follow")
     if t_qual in ("uptrend", "strong uptrend"):
-        reasons_continue.append("constructive structure until it fails")
+        reasons_continue.append("the uptrend can continue while shares keep making higher highs and stay above key averages")
 
     # Conditions for upside and invalidation
     cond_up: list[str] = []
@@ -335,8 +335,8 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     src_list = ", ".join(sorted(set(srcs)))[:140]
     bull_summary = "; ".join(bull_stories[:3])
     bear_summary = "; ".join(bear_stories[:3])
-    cond_up_txt = "; ".join(cond_up) or "continued constructive price action and supportive news"
-    invalid_txt = "; ".join(invalidation) or "pattern failure and negative guidance"
+    cond_up_txt = "; ".join(cond_up) or "keep making higher highs and hold above key moving averages"
+    invalid_txt = "; ".join(invalidation) or "breaks below key moving averages and negative guidance"
 
     # Company context (what they do)
     name = getattr(price, "long_name", None) or getattr(price, "ticker", "")
@@ -358,15 +358,15 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     ai_analysis = (
         (f"About the company: {about_txt}. " if about_txt else "")
         + f"Why it's moving: {why_moving}. "
-        + (f"Specific catalysts: { '; '.join(catalyst_details[:3])}. " if catalyst_details else "")
+        + (f"Specific drivers: { '; '.join(catalyst_details[:3])}. " if catalyst_details else "")
         + (f"Timing: {'; '.join(timing_msgs)}. " if timing_msgs else "")
         + f"Why it can continue: {why_continue}. "
-        + (f"What to watch: { '; '.join(watch[:4])}. " if watch else "")
-        + f"Bull case themes: {bull_summary or 'no clear bullish story from headlines'}. "
-        + f"Bear case/risks: {bear_summary or 'no clear bearish story from headlines'}. "
-        + f"For upside to play out: {cond_up_txt}. "
-        + f"What would invalidate: {invalid_txt}. "
-        + f"Sources scanned: {src_list or 'multiple aggregators'}. "
+        + (f"What the stock needs: { '; '.join(watch[:4])}. " if watch else "")
+        + f"Positives from headlines: {bull_summary or 'none detected'}. "
+        + f"Risks from headlines: {bear_summary or 'none detected'}. "
+        + f"To go higher: {cond_up_txt}. "
+        + f"What could go wrong: {invalid_txt}. "
+        + f"Sources: {src_list or 'multiple aggregators'}. "
         + f"Bottom line: {label} with {round(confidence,2)}% confidence."
         + (
             f" Predicted price (near-term): ${predicted:.2f} (current: ${price_now:.2f})."
