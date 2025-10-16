@@ -1,8 +1,9 @@
 from __future__ import annotations
 import asyncio
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from typing import Any, Dict, List
 
 from .config import Settings
@@ -12,14 +13,21 @@ from .providers.news_newsapi import fetch_news_newsapi, NewsItem
 from .providers.news_finnhub import fetch_news_finnhub
 from .providers.news_polygon import fetch_news_polygon
 from .analysis import recommend
+from .auth import router as auth_router, require_user
 
 app = FastAPI(title="StockBotVF API", version="0.1.0")
+# Session middleware for cookie-based auth
+app.add_middleware(SessionMiddleware, secret_key=Settings.load().secret_key, same_site="lax", https_only=False)
+
+# Auth router
+app.include_router(auth_router)
+
 templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/")
-async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def home(request: Request, user=Depends(require_user)):
+    return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
 
 def _ds_to_dict(p: PriceSnapshot, t: Technicals, news: List[NewsItem]) -> Dict[str, Any]:
@@ -67,6 +75,7 @@ async def health():
 
 @app.get("/analyze")
 async def analyze(
+    user=Depends(require_user),
     ticker: str = Query(..., description="Ticker symbol, e.g., AAPL"),
     risk: str = Query("medium", pattern="^(low|medium|high)$"),
     max_news: int = Query(10, ge=0, le=25),

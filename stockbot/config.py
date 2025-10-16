@@ -6,10 +6,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings(BaseModel):
+    # API keys
     newsapi_key: str | None = None
     finnhub_key: str | None = None
     polygon_key: str | None = None
     openai_api_key: str | None = None
+
+    # App security/config
+    secret_key: str = os.getenv("SECRET_KEY", "change-this-dev-key")
+    jwt_secret: str | None = os.getenv("JWT_SECRET")
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./stockbot.db")
+
+    # Feature flags
+    deep_nlp_enabled: bool = os.getenv("DEEP_NLP_ENABLED", "true").lower() in ("1", "true", "yes")
+
+    # Timeouts/concurrency
     request_timeout_seconds: int = 240  # default overall time budget
     per_request_timeout_seconds: int = 20
     max_concurrency: int = 8

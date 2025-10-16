@@ -12,6 +12,14 @@ except Exception:  # pragma: no cover
     Technicals = object  # type: ignore
     NewsItem = object  # type: ignore
 
+# Optional deep NLP (article-aware) enrichment
+try:
+    from .nlp import analyze_articles as _nlp_analyze
+except Exception:  # pragma: no cover
+    _nlp_analyze = None  # type: ignore
+
+from .config import Settings
+
 
 @dataclass
 class Recommendation:
@@ -137,6 +145,21 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     if hits:
         hidden_score += min(0.12, 0.04 * len(hits))
         rationale_lines.append("Recent potential catalyst(s) in headlines")
+
+    # Optional deep NLP enrichment from full articles
+    nlp_drivers: list[str] = []
+    nlp_watch: list[str] = []
+    nlp_timing: list[str] = []
+    try:
+        st = Settings.load()
+        if getattr(st, "deep_nlp_enabled", False) and _nlp_analyze:
+            nout = _nlp_analyze(news)
+            if nout:
+                nlp_drivers = list(nout.get("drivers") or [])
+                nlp_watch = list(nout.get("watch") or [])
+                nlp_timing = list(nout.get("timing") or [])
+    except Exception:
+        pass
 
     # Megatrend alignment via sector/industry
     sec = (getattr(price, "sector", None) or "").lower()
@@ -291,11 +314,20 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     else:
         watch.append("quarterly results")
 
+    # Merge NLP-derived watch/timing
+    if nlp_watch:
+        for w in nlp_watch:
+            if w not in watch:
+                watch.append(w)
+
     timing_msgs: list[str] = []
     if has_lease or has_contract:
         timing_msgs.append("moves in days–weeks on new lease/contract news")
     if has_recognition or has_capacity:
         timing_msgs.append("larger valuation moves over 3–12 months as capacity is utilized and revenue recognized")
+    for tm in (nlp_timing or []):
+        if tm not in timing_msgs:
+            timing_msgs.append(tm)
 
     # Why it can continue
     if any(term in sec or term in ind for term in megatrend_terms):
@@ -355,10 +387,17 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     except Exception:
         about_txt = f"{name} — {sec_txt}/{ind_txt}".strip().rstrip(" -/")
 
+    # Prefer NLP-derived drivers if present
+    drivers_line = None
+    if nlp_drivers:
+        drivers_line = "; ".join(nlp_drivers[:3])
+    elif catalyst_details:
+        drivers_line = "; ".join(catalyst_details[:3])
+
     ai_analysis = (
         (f"About the company: {about_txt}. " if about_txt else "")
         + f"Why it's moving: {why_moving}. "
-        + (f"Specific drivers: { '; '.join(catalyst_details[:3])}. " if catalyst_details else "")
+        + (f"Specific drivers: {drivers_line}. " if drivers_line else "")
         + (f"Timing: {'; '.join(timing_msgs)}. " if timing_msgs else "")
         + f"Why it can continue: {why_continue}. "
         + (f"What the stock needs: { '; '.join(watch[:4])}. " if watch else "")
