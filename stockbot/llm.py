@@ -59,6 +59,7 @@ def generate_narrative(
     invalid_txt: str,
     sources: str,
     label: str,
+    facts: list[str] | None = None,
     settings: Settings,
 ) -> Optional[str]:
     """
@@ -98,6 +99,12 @@ def generate_narrative(
         ctx.append(f"What could go wrong: {invalid_txt}")
     if sources:
         ctx.append(f"Sources: {sources}")
+    if facts:
+        # Include up to 8 concise fact bullets derived from multi-source NLP
+        fxs = [re.sub(r"\s+", " ", f).strip() for f in facts if f]
+        fxs = list(dict.fromkeys(fxs))[:8]
+        if fxs:
+            ctx.append("Facts: " + "; ".join(fxs))
 
     instruction = (
         "Write a concise, human, qualitative analysis for a stock. Do not include any prices, percentages, confidence numbers, or numeric targets in the narrative. "
@@ -119,10 +126,11 @@ def generate_narrative(
     }
 
     # Try provided model first, then a few smart defaults
-    candidates = []
-    if model:
+    # Ensure Qwen is primary regardless of provided model
+    candidates = ["Qwen/Qwen2.5-1.5B-Instruct"]
+    if model and model not in candidates:
         candidates.append(model)
-    for fallback in ("Qwen/Qwen2.5-1.5B-Instruct", "google/flan-t5-large", "google/flan-t5-base"):
+    for fallback in ("google/flan-t5-large", "google/flan-t5-base"):
         if fallback not in candidates:
             candidates.append(fallback)
 
@@ -130,7 +138,7 @@ def generate_narrative(
     for mdl in candidates:
         url = f"{HF_API_BASE}/{mdl}"
         # Try text2text
-        payload_t2t = {"inputs": prompt, "parameters": {"max_new_tokens": 220, "temperature": 0.4}}
+        payload_t2t = {"inputs": prompt, "parameters": {"max_new_tokens": 260, "temperature": 0.4, "repetition_penalty": 1.08, "top_p": 0.9}}
         res = _post_json(url, payload_t2t, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
         if isinstance(res, list) and res and isinstance(res[0], dict) and "generated_text" in res[0]:
             text = res[0]["generated_text"]
@@ -141,7 +149,7 @@ def generate_narrative(
 
         if not text:
             # Try text-generation
-            payload_tg = {"inputs": prompt, "parameters": {"max_new_tokens": 220, "do_sample": False, "temperature": 0.4}}
+            payload_tg = {"inputs": prompt, "parameters": {"max_new_tokens": 260, "do_sample": False, "temperature": 0.3, "repetition_penalty": 1.08, "top_p": 0.9}}
             res2 = _post_json(url, payload_tg, headers, int(getattr(settings, "llm_timeout_seconds", 18) or 18))
             if isinstance(res2, list) and res2 and isinstance(res2[0], dict) and "generated_text" in res2[0]:
                 text = res2[0]["generated_text"]

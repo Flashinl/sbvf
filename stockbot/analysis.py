@@ -431,6 +431,7 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
                 invalid_txt=invalid_txt,
                 sources=(src_list or ''),
                 label=label,
+                facts=(nout.get('facts') if isinstance(nout, dict) else None),
                 settings=st2,
             )
             if llm_out:

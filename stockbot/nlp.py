@@ -47,7 +47,7 @@ def _event_signals(text: str) -> Dict[str, bool]:
     return keys
 
 
-def analyze_articles(news: List[NewsItem], max_articles: int = 3) -> Dict[str, Any]:
+def analyze_articles(news: List[NewsItem], max_articles: int = 6) -> Dict[str, Any]:
     # Choose up to max_articles from distinct domains to avoid source bias
     selected_urls: List[str] = []
     seen_domains = set()
@@ -87,7 +87,10 @@ def analyze_articles(news: List[NewsItem], max_articles: int = 3) -> Dict[str, A
     drivers: List[str] = []
     watch: List[str] = []
     timing: List[str] = []
+    facts: List[str] = []
     found = {"lease": False, "contract": False, "capacity": False, "recognition": False, "guidance": False}
+
+    action_words = {"sign", "signed", "announce", "announced", "award", "awarded", "secure", "secured", "partner", "partnership", "order", "deal", "agreement", "expand", "expanded", "launch", "launched"}
 
     for url, text in texts:
         doc = nlp(text)
@@ -108,6 +111,25 @@ def analyze_articles(news: List[NewsItem], max_articles: int = 3) -> Dict[str, A
                     drivers.append(sent)
         except Exception:
             pass
+        # Extract simple facts: sentences with org + action word, trimmed and de-numerized
+        try:
+            for s in getattr(doc, 'sents', []):
+                txt = re.sub(r"\s+", " ", s.text.strip())
+                if len(txt) < 40:
+                    continue
+                low = txt.lower()
+                if not any(w in low for w in action_words):
+                    continue
+                # require an ORG mention
+                has_org = any(ent.label_ == 'ORG' for ent in getattr(s, 'ents', []) or [])
+                if not has_org:
+                    continue
+                digit_ratio = sum(ch.isdigit() for ch in txt) / max(1, len(txt))
+                if digit_ratio > 0.25 or txt.count('%') >= 2:
+                    continue
+                facts.append(txt)
+        except Exception:
+            pass
 
     if found["lease"]:
         watch.append("new tenant/lease announcements")
@@ -123,9 +145,14 @@ def analyze_articles(news: List[NewsItem], max_articles: int = 3) -> Dict[str, A
         if "quarterly results" not in watch:
             watch.append("quarterly results and guidance updates")
 
+    # Deduplicate and cap
+    drivers = list(dict.fromkeys(drivers))[:3]
+    facts = list(dict.fromkeys(facts))[:8]
+
     return {
-        "drivers": drivers[:3],
+        "drivers": drivers,
         "watch": list(dict.fromkeys(watch))[:4],
         "timing": list(dict.fromkeys(timing))[:3],
+        "facts": facts,
     }
 
