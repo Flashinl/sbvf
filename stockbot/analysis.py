@@ -399,64 +399,61 @@ def recommend(price: "PriceSnapshot", tech: "Technicals", news: List["NewsItem"]
     elif catalyst_details:
         drivers_line = "; ".join(catalyst_details[:3])
 
-    # Compose default narrative (fallback if LLM not available)
-    ai_analysis = (
-        (f"About the company: {about_txt}. " if about_txt else "")
-        + f"Why it's moving: {why_moving}. "
-        + (f"Specific drivers: {drivers_line}. " if drivers_line else "")
-        + (f"Timing: {'; '.join(timing_msgs)}. " if timing_msgs else "")
-        + f"Why it can continue: {why_continue}. "
-        + (f"What the stock needs: { '; '.join(watch[:4])}. " if watch else "")
-        + f"Positives from headlines: {bull_summary or 'none detected'}. "
-        + f"Risks from headlines: {bear_summary or 'none detected'}. "
-        + f"To go higher: {cond_up_txt}. "
-        + f"What could go wrong: {invalid_txt}. "
-        + f"Sources: {src_list or 'multiple aggregators'}. "
-        + f"Bottom line: {label}."
-    )
-
-    # Optional: free LLM (Hugging Face Inference API) to produce a smarter narrative
+    # Deterministic, template-based narrative (no LLM)
     try:
+        from .narrative import compose_narrative
+        # Gather facts/themes (NLP + SEC) deterministically
         st2 = st if 'st' in locals() else Settings.load()
-        if getattr(st2, 'llm_enabled', False) and getattr(st2, 'hf_api_token', None):
-            from .llm import generate_narrative
-            facts_all = []
-            if isinstance(nout, dict):
-                facts_all.extend(list(nout.get('facts') or []))
-                facts_all.extend(list(nout.get('themes') or []))
-            # Also enrich with SEC facts if enabled
-            try:
-                if getattr(st2, 'sec_enabled', True):
-                    from .sec import fetch_sec_facts
-                    sec_f = fetch_sec_facts(getattr(price, 'ticker', ''), st2)
-                    if sec_f:
-                        facts_all.extend(sec_f)
-            except Exception:
-                pass
-            # Dedup facts
-            if facts_all:
-                seen=set(); facts_all=[x for x in facts_all if not (x.lower() in seen or seen.add(x.lower()))]
-            llm_out = generate_narrative(
-                about=about_txt,
-                why_moving=why_moving,
-                drivers_line=(drivers_line or ''),
-                timing_msgs=timing_msgs,
-                why_continue=why_continue,
-                watch_list=watch,
-                bull_summary=(bull_summary or ''),
-                bear_summary=(bear_summary or ''),
-                cond_up_txt=cond_up_txt,
-                invalid_txt=invalid_txt,
-                sources=(src_list or ''),
-                label=label,
-                facts=facts_all,
-                themes=(nout.get('themes') if isinstance(nout, dict) else None),
-                settings=st2,
-            )
-            if llm_out:
-                ai_analysis = llm_out
+        facts_all: list[str] = []
+        themes_all: list[str] = []
+        if isinstance(nout, dict):
+            facts_all.extend(list(nout.get('facts') or []))
+            themes_all.extend(list(nout.get('themes') or []))
+        try:
+            if getattr(st2, 'sec_enabled', True):
+                from .sec import fetch_sec_facts
+                sec_f = fetch_sec_facts(getattr(price, 'ticker', ''), st2)
+                if sec_f:
+                    facts_all.extend(sec_f)
+        except Exception:
+            pass
+        # Dedup
+        if facts_all:
+            seen=set(); facts_all=[x for x in facts_all if not (x.lower() in seen or seen.add(x.lower()))]
+        if themes_all:
+            seen2=set(); themes_all=[x for x in themes_all if not (x.lower() in seen2 or seen2.add(x.lower()))]
+
+        ai_analysis = compose_narrative(
+            ticker=getattr(price, 'ticker', ''),
+            name=name,
+            sector=sec_txt,
+            industry=ind_txt,
+            about=about_txt,
+            trend_label=t_qual,
+            why_moving=why_moving,
+            drivers_line=(drivers_line or ''),
+            catalyst_details=catalyst_details,
+            nlp_drivers=nlp_drivers,
+            facts=facts_all,
+            themes=themes_all,
+            timing_msgs=timing_msgs,
+            watch=watch,
+            bull_summary=(bull_summary or ''),
+            bear_summary=(bear_summary or ''),
+            cond_up_txt=cond_up_txt,
+            invalid_txt=invalid_txt,
+            label=label,
+        )
     except Exception:
-        pass
+        # If anything fails, fall back to compact deterministic single-paragraph text
+        ai_analysis = (
+            (f"{name} operates in {sec_txt}/{ind_txt}. {about_txt}. " if about_txt else f"{name} operates in {sec_txt}/{ind_txt}. ")
+            + f"Why it's moving: {why_moving}. "
+            + (f"Drivers: {drivers_line}. " if drivers_line else "")
+            + (f"Timing: {'; '.join(timing_msgs)}. " if timing_msgs else "")
+            + f"Risks: {(bear_summary or 'execution and guidance tone')}. "
+            + f"Bottom line: {label}."
+        )
 
     return Recommendation(
         label=label,
