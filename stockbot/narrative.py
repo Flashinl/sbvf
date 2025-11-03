@@ -127,12 +127,15 @@ def compose_narrative(
     themes_clean = _dedup([_scrub_numbers(t) for t in themes], 3)
     nlp_clean = _dedup([_scrub_numbers(d) for d in nlp_drivers], 3)
     catalysts = _dedup([drivers_clean] + nlp_clean, 3)
+    # Prefer facts that reference partners/customers rather than the company itself
+    facts_specific = [f for f in facts_clean if name.lower() not in f.lower() and ticker.lower() not in f.lower()]
+    ex_facts = _dedup(facts_specific or facts_clean, 2)
 
     # Paragraph 1: Company context
     p1_opts = [
-        f"{name} operates in {sector}/{industry}. {about_clean}".strip(),
-        f"{name} is positioned within {sector}/{industry}. {about_clean}".strip(),
-        f"In the {sector}/{industry} space, {name} focuses on its core platform and execution. {about_clean}".strip(),
+        f"For {name} ({ticker}), operating in {sector}/{industry}, {about_clean}".strip(),
+        f"{name} ({ticker}) is positioned within {sector}/{industry}. {about_clean}".strip(),
+        f"In the {sector}/{industry} space, {name} ({ticker}) is focused on execution. {about_clean}".strip(),
     ]
     p1 = _choose(seed_val, [s for s in p1_opts if s])
 
@@ -142,6 +145,7 @@ def compose_narrative(
         "Signals from multiple sources highlight tangible drivers, not just headlines.",
         "Momentum lately ties back to specific actions and company updates.",
     ]
+    lead = f"Why it's moving: {why_clean}." if why_clean else _choose(seed_val, cat_leads)
     cat_body_parts = []
     if catalysts:
         cat_body_parts.append(f"Specific drivers include {', '.join(catalysts)}.")
@@ -149,9 +153,12 @@ def compose_narrative(
         cat_body_parts.append(f"Headlines flag {', '.join(_dedup(catalyst_details, 2))}.")
     if themes_clean:
         cat_body_parts.append(f"Common themes across sources center on {', '.join(themes_clean)}.")
-    if facts_clean:
-        cat_body_parts.append(f"Notably, filings and reports reference {', '.join(facts_clean)}.")
-    p2 = " ".join([_choose(seed_val, cat_leads), " ".join(cat_body_parts)]).strip()
+    if ex_facts:
+        if len(ex_facts) == 1:
+            cat_body_parts.append(f"For example, {ex_facts[0]}.")
+        else:
+            cat_body_parts.append(f"For example, {ex_facts[0]}; additionally, {ex_facts[1]}.")
+    p2 = " ".join([lead, " ".join(cat_body_parts)]).strip()
 
     # Paragraph 3: Timing and what the stock needs
     timing_text = _rewrite_timing(timing_msgs)
