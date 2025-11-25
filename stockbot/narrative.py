@@ -141,11 +141,19 @@ def compose_narrative(
 
     # Paragraph 2: Catalysts synthesis
     cat_leads = [
-        "Recent coverage points to concrete catalysts rather than chatter.",
-        "Signals from multiple sources highlight tangible drivers, not just headlines.",
-        "Momentum lately ties back to specific actions and company updates.",
+        "recent coverage points to concrete catalysts rather than chatter.",
+        "signals from multiple sources highlight tangible drivers, not just headlines.",
+        "momentum lately ties back to specific actions and company updates.",
     ]
-    lead = f"Why it's moving: {why_clean}." if why_clean else _choose(seed_val, cat_leads)
+    if why_clean:
+        lead = f"Why it's moving: {why_clean}."
+    else:
+        stock_leads = [
+            f"For {name} ({ticker}), {cat_leads[0]}",
+            f"For {name} ({ticker}), {cat_leads[1]}",
+            f"For {name} ({ticker}), {cat_leads[2]}",
+        ]
+        lead = _choose(seed_val, stock_leads)
     cat_body_parts = []
     if catalysts:
         cat_body_parts.append(f"Specific drivers include {', '.join(catalysts)}.")
