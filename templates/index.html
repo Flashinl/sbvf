@@ -192,6 +192,43 @@
         const r = data.recommendation || {};
         const predicted = r.predicted_price != null ? `$${fmt.format(r.predicted_price)}` : '—';
         const current = (data?.price?.price != null) ? `$${fmt.format(data.price.price)}` : '—';
+
+        // Multi-target predictions section
+        let mtSection = '';
+        if (data.multi_target) {
+          const mt = data.multi_target;
+          const signalColor = mt.trading_signal === 'BULLISH' ? 'text-green-400' : mt.trading_signal === 'BEARISH' ? 'text-red-400' : 'text-yellow-400';
+          const riskColor = mt.risk_level === 'HIGH' ? 'text-red-400' : mt.risk_level === 'LOW' ? 'text-green-400' : 'text-yellow-400';
+
+          mtSection = `
+            <div class="mt-4 pt-4 border-t border-green-800">
+              <h3 class="text-sm font-semibold text-green-400 mb-2">Multi-Target Analysis</h3>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <div class="text-green-600">Volatility</div>
+                  <div class="font-semibold text-green-200">${mt.volatility.prediction}</div>
+                  <div class="text-green-700">${(mt.volatility.confidence * 100).toFixed(0)}% confident</div>
+                </div>
+                <div>
+                  <div class="text-green-600">vs Market</div>
+                  <div class="font-semibold text-green-200">${mt.relative_performance.prediction}</div>
+                  <div class="text-green-700">${(mt.relative_performance.confidence * 100).toFixed(0)}% confident</div>
+                </div>
+                <div>
+                  <div class="text-green-600">Pattern</div>
+                  <div class="font-semibold text-green-200">${mt.breakout.prediction}</div>
+                  <div class="text-green-700">${(mt.breakout.confidence * 100).toFixed(0)}% confident</div>
+                </div>
+                <div>
+                  <div class="text-green-600">Signal</div>
+                  <div class="font-semibold ${signalColor}">${mt.trading_signal}</div>
+                  <div class="text-green-700 ${riskColor}">${mt.risk_level} Risk</div>
+                </div>
+              </div>
+              <p class="text-xs text-green-300 mt-2">${mt.interpretation || ''}</p>
+            </div>`;
+        }
+
         el('rec').innerHTML = `
           <div class=\"flex items-center justify-between\">
             <div>
@@ -203,7 +240,8 @@
               <div class=\"text-2xl font-semibold text-green-300\">Pred ${predicted} · Curr ${current}</div>
             </div>
           </div>
-          <p class=\"text-sm text-green-200 mt-2\">${(r.ai_analysis || r.rationale || '').split('\n').map(x=>`<span class=\"block\">${x}</span>`).join('')}</p>`;
+          <p class=\"text-sm text-green-200 mt-2\">${(r.ai_analysis || r.rationale || '').split('\n').map(x=>`<span class=\"block\">${x}</span>`).join('')}</p>
+          ${mtSection}`;
 
         // News
         const list = (data.news || []).slice(0, 10).map(n => `
