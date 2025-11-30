@@ -17,11 +17,13 @@ from .providers.news_polygon import fetch_news_polygon
 from .analysis import recommend
 from .auth import router as auth_router, require_user, get_current_user
 from .ml_service import init_ml_service, get_ml_service
+from .multi_target_service import init_multi_target_service, get_multi_target_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize ML service on startup"""
+    """Initialize ML services on startup"""
+    # Load transformer model
     print("[STARTUP] Loading ML model...")
     model_path = Path('models/multihorizon/best_model.pth')
     if model_path.exists():
@@ -40,6 +42,24 @@ async def lifespan(app: FastAPI):
             print("[STARTUP] API will run without ML predictions")
     else:
         print("[STARTUP] ML model not found - API will run without ML predictions")
+
+    # Load multi-target RF models
+    print("[STARTUP] Loading multi-target RF models...")
+    mt_model_dir = Path('models/multi_target')
+    if mt_model_dir.exists():
+        try:
+            init_multi_target_service(str(mt_model_dir))
+            mt = get_multi_target_service()
+            if mt.is_available():
+                print("[STARTUP] Multi-target models loaded successfully")
+                print("[STARTUP] Available: Volatility, Relative Performance, Breakout detection")
+            else:
+                print("[STARTUP] Multi-target models partially loaded or unavailable")
+        except Exception as e:
+            print(f"[STARTUP] Failed to load multi-target models: {e}")
+            print("[STARTUP] API will run without multi-target predictions")
+    else:
+        print("[STARTUP] Multi-target models not found")
 
     yield
 
@@ -272,6 +292,17 @@ async def analyze(
                 print(f"[WARNING] ML prediction failed for {ticker_norm}: {e}")
                 payload["ml_prediction"] = None
 
+        # Add multi-target predictions (volatility, relative performance, breakout)
+        mt_service = get_multi_target_service()
+        if mt_service.is_available():
+            try:
+                mt_result = await mt_service.predict(ticker_norm)
+                if mt_result:
+                    payload["multi_target"] = mt_result
+            except Exception as e:
+                print(f"[WARNING] Multi-target prediction failed for {ticker_norm}: {e}")
+                payload["multi_target"] = None
+
         return payload
     except Exception as e:
         # Ensure we always return JSON even if recommendation/serialization fails
@@ -425,4 +456,58 @@ async def ml_model_info(user=Depends(require_user)):
         }
 
     return ml_service.get_model_info()
+
+
+@app.get("/predict/multi-target")
+async def predict_multi_target(
+    user=Depends(require_user),
+    ticker: str = Query(..., description="Ticker symbol, e.g., AAPL")
+):
+    """
+    Multi-target RF predictions
+
+    Predicts three key aspects:
+    1. Volatility (HIGH/LOW)
+    2. Relative Performance vs Market (OUTPERFORM/NEUTRAL/UNDERPERFORM)
+    3. Breakout/Consolidation pattern (TRENDING/CONSOLIDATION)
+
+    Returns:
+        - Individual predictions with confidence scores
+        - Trading signal (BULLISH/BEARISH/NEUTRAL)
+        - Risk level (HIGH/MODERATE/LOW)
+        - Human-readable interpretation
+    """
+    mt_service = get_multi_target_service()
+
+    if not mt_service.is_available():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "Multi-target models not available",
+                "message": "Models not loaded. Run train_rf_multi_target.py to train models."
+            }
+        )
+
+    ticker_norm = (ticker or "").strip().upper()
+
+    try:
+        result = await mt_service.predict(ticker_norm)
+
+        if result is None:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": "Prediction failed",
+                    "message": "Could not generate predictions. Ticker may be invalid or insufficient data available."
+                }
+            )
+
+        return result
+
+    except Exception as e:
+        print(f"[ERROR] Multi-target prediction failed for {ticker_norm}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Prediction failed", "message": str(e)}
+        )
 
